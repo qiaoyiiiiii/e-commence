@@ -1,0 +1,11 @@
+langchain
+langchain-community
+chromadb
+sentence-transformers
+pydantic
+python-dotenv
+numpy
+json5
+logging
+mysql-connector-python
+langchain-deepseek
