@@ -34,7 +34,7 @@ chunks = splitter.split_documents(documents)
 # 请确保您的设备支持CUDA，如果不支持，可以尝试将device改为"cpu"或移除
 embedding_model = HuggingFaceBgeEmbeddings(
     model_name="BAAI/bge-large-zh-v1.5",
-    model_kwargs={"device": "cuda"}, # 注意：如果无CUDA设备，请改为 "cpu"
+    model_kwargs={"device": "cpu"}, # 注意：如果无CUDA设备，请改为 "cpu"
     encode_kwargs={"normalize_embeddings": True},
     query_instruction="为这个句子生成表示以用于检索相关文章："
 )
@@ -65,7 +65,7 @@ else:
 # ========== 5. Reranker ==========
 # 请确保您的设备支持CUDA，如果不支持，可以尝试将device改为"cpu"或移除
 reranker = CrossEncoderReranker(
-    model=HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-large", model_kwargs={"device": "cuda"}), # 注意：如果无CUDA设备，请改为 "cpu"
+    model=HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-large", model_kwargs={"device": "cpu"}), # 注意：如果无CUDA设备，请改为 "cpu"
     top_n=5
 )
 retriever = ContextualCompressionRetriever(

@@ -10,6 +10,16 @@ class Config:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 
+    # --- Hugging Face Cache Configuration ---
+    # Set HF_HOME to change the default cache directory for Hugging Face models.
+    # You can set this in your .env file, e.g., HF_HOME="D:\\hf_cache"
+    HF_HOME = os.getenv("HF_HOME")
+    if HF_HOME:
+        os.environ["HF_HOME"] = HF_HOME
+        # Also set TRANSFORMERS_CACHE and SENTENCE_TRANSFORMERS_HOME for compatibility
+        os.environ["TRANSFORMERS_CACHE"] = HF_HOME
+        os.environ["SENTENCE_TRANSFORMERS_HOME"] = HF_HOME
+
     # --- LLM Configuration ---
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_MODEL_NAME = os.getenv("DEEPSEEK_MODEL_NAME", "deepseek-chat") # Or deepseek-reasoner
@@ -27,12 +37,12 @@ class Config:
     CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./chroma_db")
     COLLECTION_NAME = os.getenv("COLLECTION_NAME", "ecommerce_goods")
     EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-large-zh-v1.5")
-    EMBEDDING_MODEL_DEVICE = os.getenv("EMBEDDING_MODEL_DEVICE", "cuda") # or "cpu"
+    EMBEDDING_MODEL_DEVICE = os.getenv("EMBEDDING_MODEL_DEVICE", "cpu") # or "cpu"
     RETRIEVER_K = int(os.getenv("RETRIEVER_K", 20)) # Number of documents to retrieve before reranking
 
     # --- Reranker Configuration ---
     RERANKER_MODEL_NAME = os.getenv("RERANKER_MODEL_NAME", "BAAI/bge-reranker-large")
-    RERANKER_MODEL_DEVICE = os.getenv("RERANKER_MODEL_DEVICE", "cuda") # or "cpu"
+    RERANKER_MODEL_DEVICE = os.getenv("RERANKER_MODEL_DEVICE", "cpu") # or "cpu"
     RERANKER_TOP_N = int(os.getenv("RERANKER_TOP_N", 5)) # Number of documents after reranking
 
     # --- Agent Specific Configuration ---

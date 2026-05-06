@@ -106,9 +106,9 @@ LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
 
 # RAG 配置
 EMBEDDING_MODEL_NAME="BAAI/bge-large-zh-v1.5"
-EMBEDDING_MODEL_DEVICE="cuda" # 如果没有 CUDA GPU，则为 "cpu"
+EMBEDDING_MODEL_DEVICE="cpu" # 如果没有 CUDA GPU，则为 "cpu"
 RERANKER_MODEL_NAME="BAAI/bge-reranker-large"
-RERANKER_MODEL_DEVICE="cuda" # 或 "cpu"
+RERANKER_MODEL_DEVICE="cpu" # 或 "cpu"
 RETRIEVER_K=20
 RERANKER_TOP_N=5
 
