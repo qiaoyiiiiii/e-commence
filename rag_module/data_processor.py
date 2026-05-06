@@ -51,15 +51,14 @@ class DataProcessor:
             if good.get('tags'):
                 content += f"标签: {', '.join(good['tags'])}\n"
 
-            # Store all original good data in metadata
-            metadata = good.copy()
-            # Convert JSON fields in metadata back to string for LangChain Document if needed,
-            # or ensure they are serializable. For now, keep them as objects for direct use.
-            # LangChain Document's metadata usually prefers flat structures or serializable objects.
+            # Create document with original metadata, then filter complex types
+            doc = Document(page_content=content, metadata=good.copy())
+            doc.metadata = filter_complex_metadata(doc.metadata)
+            documents.append(doc)
 
-            documents.append(Document(page_content=content, metadata=metadata))
         logging.info(f"Converted {len(documents)} goods into LangChain Documents.")
         return documents
+
 
     def load_and_process_goods(self) -> List[Document]:
         """ Loads goods data from MySQL and converts it into LangChain Documents. """
