@@ -1,4 +1,5 @@
 import os
+from typing import List
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
@@ -10,6 +11,7 @@ logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s 
 
 class VectorStoreManager:
     def __init__(self):
+        
         self.embedding_model = self._initialize_embedding_model()
         self.vectorstore = self._initialize_vectorstore()
 
