@@ -13,7 +13,7 @@ class Config:
     # --- Hugging Face Cache Configuration ---
     # Set HF_HOME to change the default cache directory for Hugging Face models.
     # You can set this in your .env file, e.g., HF_HOME="D:\\hf_cache"
-    HF_HOME = os.getenv("HF_HOME")
+    HF_HOME="D:\\hf_cache"
     if HF_HOME:
         os.environ["HF_HOME"] = HF_HOME
         # Also set TRANSFORMERS_CACHE and SENTENCE_TRANSFORMERS_HOME for compatibility
