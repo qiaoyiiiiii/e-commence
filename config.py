@@ -50,6 +50,12 @@ class Config:
     SELF_REFLECTION_ENABLED = os.getenv("SELF_REFLECTION_ENABLED", "True").lower() == "true"
     RERANKING_ENABLED = os.getenv("RERANKING_ENABLED", "True").lower() == "true"
 
+    # --- Memory Compression Configuration ---
+    # Trigger summarization when short-term memory reaches this many messages
+    MEMORY_COMPRESSION_THRESHOLD = int(os.getenv("MEMORY_COMPRESSION_THRESHOLD", 10))
+    # How many recent messages to keep verbatim after compression
+    MEMORY_COMPRESSION_KEEP_RECENT = int(os.getenv("MEMORY_COMPRESSION_KEEP_RECENT", 4))
+
     # --- Data Paths (for initial loading if needed, though most will be DB driven) ---
     # This might be used for initial seeding of the database from local files before switching to full DB usage
     GOODS_DATA_PATH = os.getenv("GOODS_DATA_PATH", "./data/goods_data.json")

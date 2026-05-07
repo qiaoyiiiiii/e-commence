@@ -82,6 +82,54 @@ class MemoryManager:
         """ Retrieves forbidden items from long-term memory. """
         return self.long_term_memory.get('forbidden_items', [])
 
+    def get_history_summary(self) -> str:
+        """ Returns the stored conversation summary (empty string if none). """
+        summary = self.long_term_memory.get('chat_history', '')
+        return summary if isinstance(summary, str) else ''
+
+    def compress_short_term_memory(self, llm) -> None:
+        """Summarizes old messages into long-term memory when short-term exceeds threshold.
+
+        Keeps the MEMORY_COMPRESSION_KEEP_RECENT most recent messages verbatim so the
+        LLM always has immediate context; the rest are merged into a rolling summary
+        stored in long_term_memory['chat_history'].
+        """
+        messages = self.short_term_memory
+        if len(messages) < Config.MEMORY_COMPRESSION_THRESHOLD:
+            return
+
+        to_summarize = messages[:-Config.MEMORY_COMPRESSION_KEEP_RECENT]
+        self.short_term_memory = messages[-Config.MEMORY_COMPRESSION_KEEP_RECENT:]
+
+        conversation_text = "\n".join(
+            f"{'用户' if m['role'] == 'user' else 'AI'}: {m['content']}"
+            for m in to_summarize
+        )
+
+        existing_summary = self.get_history_summary()
+        if existing_summary:
+            prompt = (
+                f"原有摘要：{existing_summary}\n\n"
+                f"新增对话：\n{conversation_text}\n\n"
+                f"请合并以上内容，生成更新后的简短摘要，保留用户的主要需求、偏好和关键信息，不超过200字："
+            )
+        else:
+            prompt = (
+                f"请将以下对话历史总结成简短摘要，保留用户的主要需求、偏好和关键信息，不超过200字：\n\n"
+                f"{conversation_text}\n\n摘要："
+            )
+
+        try:
+            result = llm.invoke(prompt)
+            summary = result.content if hasattr(result, 'content') else str(result)
+            self.long_term_memory['chat_history'] = summary
+            self._save_long_term_memory_to_db()
+            logging.info(f"Short-term memory compressed for user {self.user_id}.")
+        except Exception as e:
+            logging.error(f"Failed to compress short-term memory for user {self.user_id}: {e}")
+            # Restore messages so nothing is lost on failure
+            self.short_term_memory = messages
+
     # Future: Implement methods for global knowledge memory (e.g., loading tag library)
 
 # Example usage

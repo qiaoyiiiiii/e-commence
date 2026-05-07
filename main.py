@@ -93,10 +93,18 @@ def run_agent_cli(user_id: str = "default_user"):
         try:
             mcp_manager.memory_manager.add_message_to_short_term_memory("user", user_input)
 
-            # Build conversation history context (exclude the just-added user message)
+            # Build chat history context: summary (if any) + recent verbatim messages
             history = mcp_manager.memory_manager.get_short_term_memory()[:-1]
-            chat_history_str = format_chat_history(history)
-            chat_history_block = f"对话历史：\n{chat_history_str}\n\n" if chat_history_str else ""
+            history_summary = mcp_manager.memory_manager.get_history_summary()
+            recent_str = format_chat_history(history)
+            if history_summary and recent_str:
+                chat_history_block = f"[历史摘要] {history_summary}\n[最近对话]\n{recent_str}\n\n"
+            elif history_summary:
+                chat_history_block = f"[历史摘要] {history_summary}\n\n"
+            elif recent_str:
+                chat_history_block = f"对话历史：\n{recent_str}\n\n"
+            else:
+                chat_history_block = ""
 
             # Enrich the query with the user's long-term preferences and forbidden items
             memory_hint = mcp_manager.get_memory_context_hint()
@@ -106,8 +114,9 @@ def run_agent_cli(user_id: str = "default_user"):
             answer = response["answer"]
             context_docs = response["context"]
 
-            # Store agent response in MCPManager's memory
+            # Store agent response, then compress memory if threshold is reached
             mcp_manager.memory_manager.add_message_to_short_term_memory("agent", answer)
+            mcp_manager.memory_manager.compress_short_term_memory(llm)
 
             print("\n" + "-" * 50)
             print("Agent 回复:")
