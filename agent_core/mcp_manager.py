@@ -104,6 +104,7 @@ class MCPManager:
             self._llm_service = DeepSeekLLM()
         return self._llm_service
 
+# 获取记忆偏好
     def get_memory_context_hint(self) -> str:
         """
         生成用户记忆上下文提示字符串，用于在 RAG 检索前增强查询语义。
@@ -138,10 +139,7 @@ class MCPManager:
 
     def process_user_input(self, user_input: str) -> str:
         """
-        处理一轮用户输入的完整流程：记忆更新 → 历史构建 → 偏好增强 → Agent 推理 → 记忆压缩。
-
-        这是整个对话系统的核心调度方法，调用方（main.py）只需传入用户原始输入，
-        其余所有步骤（记忆、检索、工具调用、LLM 推理）均在此方法内部协调完成。
+        用户输入-》存入短期记忆-》获取短期记忆-》获取长期记忆-》长期短期记忆format-》根据记忆和input有无进行不同样式的评拼接获取偏好-》调用Agent 执行器.invoke【存入prompt的参数】-》存入短期记忆-》检测记忆压缩
 
         流程：
             1. 将用户消息写入短期记忆。

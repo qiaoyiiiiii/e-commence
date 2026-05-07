@@ -15,16 +15,6 @@
          （例如 MCPManager 中的直接对话生成、记忆压缩摘要等）。
        - 与 ReActAgentEngine 解耦，避免循环导入。
 
-依赖：
-    - langchain.agents              : create_react_agent、AgentExecutor
-    - langchain_core.prompts        : PromptTemplate
-    - langchain_core.tools          : Tool
-    - langchain_deepseek            : ChatDeepSeek（DeepSeek 官方 LangChain 集成）
-    - config.Config                 : API Key、模型名称、温度等配置项
-    - rag_module.hybrid_retriever   : HybridRetrieverManager（向量+关键词混合检索）
-    - data.prompt_templates         : REACT_AGENT_PROMPT（备用，当前使用模块内定义的提示词）
-    - agent_core.skill_router       : SkillRouter（在方法内延迟导入，避免循环依赖）
-
 使用方式：
     # ReAct 智能体（适合复杂多工具推理场景）
     engine = ReActAgentEngine(user_id="user_001")
@@ -45,37 +35,10 @@ from langchain_deepseek import ChatDeepSeek
 
 from config import Config
 from tools.tool_loader import get_all_tools
+from data.prompt_templates import REACT_SYSTEM_PROMPT
 
 # 按照全局配置初始化日志，格式包含时间戳、日志级别和消息内容
 logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# ReAct 提示词模板（标准 ReAct 格式）
-# 占位符说明：
-#   {tools}           - LangChain 自动填充已注册工具的名称和描述
-#   {tool_names}      - LangChain 自动填充工具名称列表（逗号分隔）
-#   {input}           - 用户本轮输入的问题
-#   {agent_scratchpad}- LangChain 自动填充 Agent 的中间推理步骤记录
-REACT_SYSTEM_PROMPT = """你是一个智能电商导购助手，帮助用户找到最合适的商品。
-
-{chat_history}可用工具：
-
-{tools}
-
-使用以下格式进行推理：
-
-Question: 用户的问题
-Thought: 思考下一步该做什么
-Action: 要使用的工具，必须是 [{tool_names}] 中的一个
-Action Input: 工具的输入内容
-Observation: 工具返回的结果
-...（以上步骤可重复多次）
-Thought: 我现在知道最终答案了
-Final Answer: 用中文给出完整、友好的最终回答
-
-开始！
-
-Question: {input}
-Thought:{agent_scratchpad}"""
 
 
 class ReActAgentEngine:
@@ -117,6 +80,7 @@ class ReActAgentEngine:
         self.agent_executor = self._create_agent_executor()
         logging.info(f"ReActAgentEngine initialized for user {self.user_id}")
 
+        # 方法：llm，获得tools，创建Agent 执行器，使用Agent 执行器
     def _initialize_llm(self):
         """
         初始化 DeepSeek LLM 实例，供 ReAct Agent 进行推理使用。
@@ -251,6 +215,7 @@ class DeepSeekLLM:
         """
         self.llm = self._initialize_llm()
 
+        # 方法：创建大模型，run，get
     def _initialize_llm(self):
         """
         初始化 ChatDeepSeek 实例，配置项与 ReActAgentEngine 中相同。

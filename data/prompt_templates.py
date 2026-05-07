@@ -1,16 +1,42 @@
 """
 模块：prompt_templates.py
 职责：
-    提供对话历史格式化工具函数，供 MCPManager 在构建 ReAct Agent 的
-    chat_history 上下文时使用。
-
-    原有的 RAG_PROMPT_TEMPLATE、REACT_AGENT_PROMPT、SELF_REFLECTION_PROMPT 等
-    静态模板在切换为 ReAct Agent 架构后已不再使用，均已移除。
-    若需要静态 Prompt，请在对应模块（react_agent.py / check_skills.py）中本地定义。
+    集中管理项目所有提示词模板，以及对话历史格式化工具函数。
 
 暴露接口：
+    REACT_SYSTEM_PROMPT   : ReAct Agent 系统提示词模板
     format_chat_history(messages) -> str
 """
+
+
+# ReAct Agent 系统提示词
+# 占位符说明：
+#   {chat_history}    - 对话历史（可选，默认空字符串）
+#   {tools}           - LangChain 自动填充已注册工具的名称和描述
+#   {tool_names}      - LangChain 自动填充工具名称列表（逗号分隔）
+#   {input}           - 用户本轮输入
+#   {agent_scratchpad}- LangChain 自动填充 Agent 的中间推理步骤
+REACT_SYSTEM_PROMPT = """你是一个智能电商导购助手，帮助用户找到最合适的商品。
+
+{chat_history}可用工具：
+
+{tools}
+
+使用以下格式进行推理：
+
+Question: 用户的问题
+Thought: 思考下一步该做什么
+Action: 要使用的工具，必须是 [{tool_names}] 中的一个
+Action Input: 工具的输入内容
+Observation: 工具返回的结果
+...（以上步骤可重复多次）
+Thought: 我现在知道最终答案了
+Final Answer: 用中文给出完整、友好的最终回答
+
+开始！
+
+Question: {input}
+Thought:{agent_scratchpad}"""
 
 
 def format_chat_history(messages) -> str:
