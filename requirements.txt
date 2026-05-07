@@ -7,7 +7,6 @@ pydantic
 python-dotenv
 numpy
 json5
-logging
 mysql-connector-python
 langchain-deepseek
 rank_bm25

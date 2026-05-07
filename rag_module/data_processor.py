@@ -176,7 +176,7 @@ class DataProcessor:
                 content += f"标签: {', '.join(good['tags'])}\n"
 
             # ── 构建 Document 并过滤 metadata ────────────────────────────
-            # 使用 good.copy() 避免后续 filter_complex_metadata 修改原始数据
+            # 创建一个新的字典对象保留原始数据
             doc = Document(page_content=content, metadata=good.copy())
             # 将 metadata 中不兼容 ChromaDB 的类型（Decimal、list 等）转换为合法类型
             doc.metadata = filter_complex_metadata(doc.metadata)

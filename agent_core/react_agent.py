@@ -44,8 +44,7 @@ from langchain_core.tools import Tool
 from langchain_deepseek import ChatDeepSeek
 
 from config import Config
-from rag_module.hybrid_retriever import HybridRetrieverManager
-from data.prompt_templates import REACT_AGENT_PROMPT
+from tools.tool_loader import get_all_tools
 
 # 按照全局配置初始化日志，格式包含时间戳、日志级别和消息内容
 logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -56,28 +55,27 @@ logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s 
 #   {tool_names}      - LangChain 自动填充工具名称列表（逗号分隔）
 #   {input}           - 用户本轮输入的问题
 #   {agent_scratchpad}- LangChain 自动填充 Agent 的中间推理步骤记录
-REACT_SYSTEM_PROMPT = """
-你是一个智能电商导购助手。你的目标是帮助用户找到合适的商品。
-你可以使用以下工具：
+REACT_SYSTEM_PROMPT = """你是一个智能电商导购助手，帮助用户找到最合适的商品。
+
+{chat_history}可用工具：
 
 {tools}
 
-使用以下格式进行思考和行动：
+使用以下格式进行推理：
 
-Question: 用户输入的问题
-Thought: 你应该始终思考下一步该做什么
-Action: 应该采取的行动，必须是 [{tool_names}] 中的一个
-Action Input: 行动的输入参数
-Observation: 行动的结果
-... (这个 Thought/Action/Action Input/Observation 可以重复 N 次)
+Question: 用户的问题
+Thought: 思考下一步该做什么
+Action: 要使用的工具，必须是 [{tool_names}] 中的一个
+Action Input: 工具的输入内容
+Observation: 工具返回的结果
+...（以上步骤可重复多次）
 Thought: 我现在知道最终答案了
-Final Answer: 对原始输入问题的最终回答
+Final Answer: 用中文给出完整、友好的最终回答
 
 开始！
 
 Question: {input}
-Thought:{agent_scratchpad}
-"""
+Thought:{agent_scratchpad}"""
 
 
 class ReActAgentEngine:
@@ -115,7 +113,7 @@ class ReActAgentEngine:
         self.user_id = user_id
         # 按顺序初始化：LLM → 工具 → Agent 执行器
         self.llm = self._initialize_llm()
-        self.tools = self._initialize_tools()
+        self.tools = self._initialize_tools(user_id)
         self.agent_executor = self._create_agent_executor()
         logging.info(f"ReActAgentEngine initialized for user {self.user_id}")
 
@@ -150,91 +148,22 @@ class ReActAgentEngine:
             logging.error(f"Failed to initialize DeepSeek LLM: {e}")
             raise
 
-    def _initialize_tools(self) -> List[Tool]:
+    def _initialize_tools(self, user_id: str) -> List[Tool]:
         """
-        初始化 Agent 可用的工具列表，来源为 SkillRouter 和 RAG 检索器。
+        委托 tools/tool_loader.py 完成所有工具的加载与注册。
 
-        工具注册流程：
-            1. 延迟导入 SkillRouter（避免与 skill_router.py 产生循环依赖）。
-            2. 遍历 SkillRouter 中已注册的所有技能，每个技能封装为一个 LangChain Tool。
-               - Tool 的 func 为闭包，固定捕获技能名称（name=skill_name），
-                 避免 Python 循环变量绑定的陷阱。
-               - 技能调用接口：skill_router.execute_skill(name, user_query=query)。
-            3. 尝试初始化 HybridRetrieverManager，将混合检索器封装为 product_search 工具。
-               - 若 RAG 初始化失败（如向量库未建立），仅记录警告，不影响其他工具。
+        tools/ 目录是 skills/ 与 Agent 之间的适配层，负责：
+          - 将 Agent 的字符串输入转换为技能函数所需的结构化参数
+          - 将技能返回的结构化数据格式化为可读字符串
+          - 为每个工具提供清晰的中文描述，帮助 Agent 正确选择工具
+
+        参数：
+            user_id (str): 当前用户 ID，由需要用户上下文的工具（个性化推荐）使用。
 
         返回：
-            List[Tool]: 可注入到 AgentExecutor 的工具列表。
-
-        注意：
-            RAG 工具初始化失败时不抛出异常，Agent 仍可使用其他技能工具正常运行。
+            List[Tool]: 全部可用工具列表，直接传入 AgentExecutor。
         """
-        # 延迟导入，避免 react_agent ↔ skill_router 的循环导入问题
-        from agent_core.skill_router import SkillRouter
-
-        tools = []
-
-        # 步骤 1：将 SkillRouter 中所有已注册技能封装为 LangChain Tool
-        skill_router = SkillRouter()
-        registered_skills = skill_router.list_skills()
-
-        for skill_name in registered_skills:
-            # 使用默认参数 name=skill_name 固定闭包中的技能名称，
-            # 防止 Python 循环中所有闭包都引用最后一个 skill_name 的问题
-            def skill_wrapper(query, name=skill_name):
-                try:
-                    return skill_router.execute_skill(name, user_query=query)
-                except Exception as e:
-                    return f"Error executing skill {name}: {str(e)}"
-
-            tool = Tool(
-                name=skill_name,
-                func=skill_wrapper,
-                description=f"Useful for when you need to {skill_name}. Input should be a relevant query or parameters."
-            )
-            tools.append(tool)
-
-        # 步骤 2：将 RAG 混合检索器封装为 product_search 工具
-        try:
-            hybrid_retriever_manager = HybridRetrieverManager()
-            retriever = hybrid_retriever_manager.get_retriever()
-
-            def rag_search(query: str) -> str:
-                """
-                基于用户自然语言描述，通过混合检索器搜索相关商品。
-
-                参数：
-                    query (str): 用户的商品需求描述。
-
-                返回：
-                    str: 格式化的商品信息列表，每行包含名称、价格和特性；
-                         若无匹配结果则返回提示字符串。
-                """
-                docs = retriever.invoke(query)
-                if not docs:
-                    return "No relevant products found."
-
-                formatted_docs = []
-                for doc in docs:
-                    # 从文档元数据中提取商品信息，缺失字段用默认值填充
-                    name = doc.metadata.get('name', 'Unknown')
-                    price = doc.metadata.get('price', 'N/A')
-                    feature = doc.metadata.get('feature', '')
-                    formatted_docs.append(f"Product: {name}, Price: {price}, Feature: {feature}")
-
-                return "\n".join(formatted_docs)
-
-            rag_tool = Tool(
-                name="product_search",
-                func=rag_search,
-                description="Useful for when you need to search for products based on natural language descriptions. Input should be a detailed product description or requirement."
-            )
-            tools.append(rag_tool)
-        except Exception as e:
-            # RAG 工具不可用时仅发出警告，Agent 仍可运行其他 Skill 工具
-            logging.warning(f"Failed to initialize RAG tool: {e}. RAG functionality will be unavailable.")
-
-        return tools
+        return get_all_tools(user_id)
 
     def _create_agent_executor(self) -> AgentExecutor:
         """
@@ -255,47 +184,43 @@ class ReActAgentEngine:
             handle_parsing_errors=True  : LLM 输出格式不符合 ReAct 要求时自动重试，
                                           提高 Agent 鲁棒性。
         """
-        # 从字符串模板创建 PromptTemplate，LangChain 会自动填充 {tools}、{tool_names} 等占位符
-        prompt = PromptTemplate.from_template(REACT_SYSTEM_PROMPT)
+        # {chat_history} 设为可选（默认空字符串），invoke 时可覆盖注入对话历史
+        prompt = PromptTemplate.from_template(REACT_SYSTEM_PROMPT).partial(chat_history="")
 
-        # 组合 LLM、工具和提示词，生成标准 ReAct Agent
-        agent = create_react_agent(
-            llm=self.llm,
-            tools=self.tools,
-            prompt=prompt
-        )
+        agent = create_react_agent(llm=self.llm, tools=self.tools, prompt=prompt)
 
-        # 将 Agent 包装为执行器，添加循环控制和错误处理
         agent_executor = AgentExecutor(
             agent=agent,
             tools=self.tools,
-            verbose=Config.DEBUG_MODE,   # DEBUG 模式下输出详细推理步骤
-            max_iterations=5,            # 防止无限循环
-            handle_parsing_errors=True   # 自动处理 LLM 输出解析错误
+            verbose=Config.DEBUG_MODE,
+            max_iterations=5,
+            handle_parsing_errors=True,
         )
         return agent_executor
 
-    def run(self, user_input: str) -> str:
+    def run(self, user_input: str, chat_history: str = "") -> str:
         """
         执行一轮 ReAct 推理，处理用户输入并返回最终答案。
 
-        Agent 会在内部进行多轮 Thought/Action/Observation 循环，
-        直到得出 Final Answer 或达到最大迭代次数。
-
         参数：
-            user_input (str): 用户输入的自然语言查询。
+            user_input    (str): 用户输入的自然语言查询（可含偏好增强前缀）。
+            chat_history  (str): 格式化后的对话历史字符串，注入 Prompt 的
+                                 {chat_history} 槽位，帮助 Agent 理解上下文。
+                                 默认为空字符串（首轮对话）。
 
         返回：
-            str: Agent 的最终回复文本。
-                 若执行出错，返回包含错误信息的友好提示字符串。
+            str: Agent 的最终回复文本（Final Answer）。
+                 若执行出错，返回中文友好提示字符串。
         """
         try:
-            # AgentExecutor.invoke 接收字典格式的输入，"input" 对应提示词中的 {input} 占位符
-            response = self.agent_executor.invoke({"input": user_input})
-            return response.get("output", "Sorry, I couldn't generate a response.")
+            response = self.agent_executor.invoke({
+                "input": user_input,
+                "chat_history": chat_history,
+            })
+            return response.get("output", "抱歉，我无法生成回答。")
         except Exception as e:
             logging.error(f"Error running ReAct Agent: {e}")
-            return f"Sorry, an error occurred while processing your request: {str(e)}"
+            return f"抱歉，处理您的请求时出现问题：{str(e)}"
 
 
 class DeepSeekLLM:

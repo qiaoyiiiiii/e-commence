@@ -160,7 +160,7 @@ class Config:
     # -------------------------------------------------------------------------
 
     # 短期记忆消息条数阈值：超过此数量时触发摘要压缩，防止上下文过长
-    MEMORY_COMPRESSION_THRESHOLD = int(os.getenv("MEMORY_COMPRESSION_THRESHOLD", 10))
+    MEMORY_COMPRESSION_THRESHOLD = int(os.getenv("MEMORY_COMPRESSION_THRESHOLD", 20))
 
     # 压缩后保留的最近原始消息条数（其余转为摘要）
     MEMORY_COMPRESSION_KEEP_RECENT = int(os.getenv("MEMORY_COMPRESSION_KEEP_RECENT", 4))

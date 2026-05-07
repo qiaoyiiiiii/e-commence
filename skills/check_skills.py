@@ -39,21 +39,23 @@ class CheckSkills:
     是否存在不符合用户需求的商品，并给出改进建议。
 
     属性：
-        llm_service (DeepSeekLLM): DeepSeek LLM 服务封装实例，提供 invoke() 方法。
-        llm: 由 llm_service.get_llm() 返回的底层 LLM 对象（保留供未来直接使用）。
+        _llm_service (DeepSeekLLM | None): DeepSeek LLM 服务实例，懒加载，初始为 None。
+            仅在 self_reflection_check 被实际调用时才初始化，避免 SkillRouter
+            注册阶段无谓地创建 LLM 客户端对象。
     """
 
     def __init__(self):
         """
-        初始化 CheckSkills：
-          - 创建 DeepSeekLLM 服务实例（负责模型调用）
-          - 获取底层 LLM 对象（当前主要通过 llm_service.invoke() 调用）
-        注意：初始化时会加载 LLM 配置，需确保环境变量 DEEPSEEK_API_KEY 已设置。
+        初始化 CheckSkills。LLM 不在此处创建，由 llm_service 属性懒加载。
         """
-        # 创建 DeepSeek LLM 服务实例，用于执行自省反思的模型调用
-        self.llm_service = DeepSeekLLM()
-        # 获取底层 LLM 对象，保留以备未来直接使用（如流式输出等）
-        self.llm = self.llm_service.get_llm()
+        self._llm_service: DeepSeekLLM | None = None
+
+    @property
+    def llm_service(self) -> DeepSeekLLM:
+        """懒加载 DeepSeekLLM，首次调用 self_reflection_check 时才实际初始化。"""
+        if self._llm_service is None:
+            self._llm_service = DeepSeekLLM()
+        return self._llm_service
 
     def self_reflection_check(self, user_query: str, recommended_goods: List[Dict[str, Any]]) -> str:
         """

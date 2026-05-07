@@ -60,13 +60,32 @@ class MCPManager:
         参数：
             user_id (str): 用户唯一标识符，用于关联记忆数据库记录。
         """
-        # 标识当前用户，用于日志追踪和记忆关联
         self.user_id = user_id
         # 实例化 MemoryManager，触发从数据库加载该用户的历史长期记忆
         self.memory_manager = MemoryManager(user_id)
-        # LLM 服务懒加载：初始化时不创建，首次调用 process_user_input 时才实例化
         self._llm_service = None
+        # ReActAgentEngine 懒加载：仅在首次调用 react_engine 属性时初始化，
+        # 避免导入 MCPManager 时触发向量库、BM25、LLM 等重型组件的加载
+        self._react_engine = None
         logging.info(f"MCPManager initialized for user {self.user_id}")
+
+    @property
+    def react_engine(self):
+        """
+        ReActAgentEngine 的懒加载属性。
+
+        首次访问时才创建 ReActAgentEngine 实例（触发 SkillRouter、
+        HybridRetrieverManager、LLM 等重型组件的初始化），后续调用直接返回。
+        延迟初始化确保仅在真正需要处理用户输入时才承担启动开销。
+
+        返回：
+            ReActAgentEngine: 已初始化的 ReAct 智能体引擎实例。
+        """
+        if self._react_engine is None:
+            # 延迟导入，避免与 react_agent.py 之间的潜在循环依赖
+            from agent_core.react_agent import ReActAgentEngine
+            self._react_engine = ReActAgentEngine(user_id=self.user_id)
+        return self._react_engine
 
     @property
     def llm_service(self):
@@ -119,51 +138,57 @@ class MCPManager:
 
     def process_user_input(self, user_input: str) -> str:
         """
-        处理一轮用户输入：记录消息、构造上下文、调用 LLM 生成回复。
+        处理一轮用户输入的完整流程：记忆更新 → 历史构建 → 偏好增强 → Agent 推理 → 记忆压缩。
+
+        这是整个对话系统的核心调度方法，调用方（main.py）只需传入用户原始输入，
+        其余所有步骤（记忆、检索、工具调用、LLM 推理）均在此方法内部协调完成。
 
         流程：
-            1. 将用户输入写入短期记忆。
-            2. 读取当前短期记忆（对话历史）和长期记忆上下文。
-            3. 将对话历史格式化后拼接为 LLM 提示词。
-            4. 调用 LLM 服务（懒加载）生成回复内容。
-            5. 将 Agent 回复也写入短期记忆，维持完整对话链。
+            1. 将用户消息写入短期记忆。
+            2. 构建对话历史上下文块（摘要 + 近期原始消息）。
+            3. 将用户长期偏好拼入查询，增强检索个性化效果。
+            4. 调用 ReActAgentEngine.run()，由 Agent 自主决策工具并生成答案。
+            5. 将 Agent 回复写入短期记忆，按需触发 LLM 摘要压缩。
 
         参数：
-            user_input (str): 用户本轮输入的文本。
+            user_input (str): 用户本轮输入的原始文本。
 
         返回：
-            str: Agent 生成的回复文本。
-                 若 LLM 调用失败，则返回固定错误提示字符串。
-
-        异常处理：
-            捕获所有 LLM 调用异常，记录错误日志，并返回友好的错误提示，
-            不向上层抛出异常，保证会话流程不中断。
+            str: ReAct Agent 生成的最终回复文本。
+                 若 Agent 执行出错，返回中文友好提示字符串。
         """
-        # 将用户本轮输入写入短期记忆，保持对话历史完整
+        # 步骤1：记录用户消息
         self.memory_manager.add_message_to_short_term_memory("user", user_input)
-        logging.info(f"User {self.user_id} input: {user_input}")
+        logging.info(f"User [{self.user_id}] input: {user_input}")
 
-        # 读取当前短期记忆（本次会话的全部对话历史）
-        chat_history = self.memory_manager.get_short_term_memory()
-        # 读取长期记忆（偏好、禁止项等），当前版本作为备用上下文，未直接注入提示词
-        long_term_context = self.memory_manager.get_long_term_memory()
+        # 步骤2：构建对话历史上下文（与 main.py 原有逻辑一致）
+        history = self.memory_manager.get_short_term_memory()[:-1]  # 排除刚写入的当前消息
+        history_summary = self.memory_manager.get_history_summary()
+        recent_str = format_chat_history(history)
 
-        # 将消息列表格式化为多行对话文本，供 LLM 理解上下文
-        formatted_history = format_chat_history(chat_history)
-        # 构造包含对话历史的完整提示词
-        prompt_context = f"当前的对话历史：\n{formatted_history}\n\n用户：{user_input}\nAgent："
+        if history_summary and recent_str:
+            chat_history_block = f"[历史摘要] {history_summary}\n[最近对话]\n{recent_str}\n\n"
+        elif history_summary:
+            chat_history_block = f"[历史摘要] {history_summary}\n\n"
+        elif recent_str:
+            chat_history_block = f"对话历史：\n{recent_str}\n\n"
+        else:
+            chat_history_block = ""
 
-        # 调用 LLM 生成回复（此处触发懒加载初始化 LLM 服务）
-        try:
-            response_content = self.llm_service.invoke(prompt_context)
-            # 将 Agent 回复也写入短期记忆，保持对话历史的对称性
-            self.memory_manager.add_message_to_short_term_memory("agent", response_content)
-            logging.info(f"Agent {self.user_id} response: {response_content}")
-            return response_content
-        except Exception as e:
-            logging.error(f"Error in MCPManager processing user input for {self.user_id}: {e}")
-            # 返回友好的错误提示，不暴露内部异常信息给用户
-            return "抱歉，我在处理您的请求时遇到了问题。"
+        # 步骤3：将用户长期偏好拼入查询，引导 Agent 和检索器关注个性化需求
+        memory_hint = self.get_memory_context_hint()
+        enriched_input = f"{user_input}。[{memory_hint}]" if memory_hint else user_input
+
+        # 步骤4：ReAct Agent 自主决策——选择工具、调用技能、生成最终答案
+        response = self.react_engine.run(enriched_input, chat_history=chat_history_block)
+        logging.info(f"Agent [{self.user_id}] response: {response[:100]}...")
+
+        # 步骤5：记录回复并按需压缩历史摘要
+        self.memory_manager.add_message_to_short_term_memory("agent", response)
+        # 复用 react_engine 内已有的 LLM 实例，避免创建重复对象
+        self.memory_manager.compress_short_term_memory(self.react_engine.llm)
+
+        return response
 
     # Future methods:
     # def detect_missing_information(self, current_state) -> List[str]:
@@ -180,31 +205,31 @@ class MCPManager:
 
 
 # Example usage
-if __name__ == "__main__":
-    # Ensure MySQL is running, tables are set up, and DEEPSEEK_API_KEY is in .env
-    test_user_id = "test_user_mcp_001"
-    print(f"\n--- Testing MCPManager for {test_user_id} ---")
+# if __name__ == "__main__":
+#     # Ensure MySQL is running, tables are set up, and DEEPSEEK_API_KEY is in .env
+#     test_user_id = "test_user_mcp_001"
+#     print(f"\n--- Testing MCPManager for {test_user_id} ---")
 
-    mcp_manager = MCPManager(test_user_id)
+#     mcp_manager = MCPManager(test_user_id)
 
-    # Simulate a conversation
-    responses = []
-    queries = [
-        "我想要一件夏天的连衣裙",
-        "颜色要是蓝色的",
-        "价格不要太贵",
-        "给我推荐一下"
-    ]
+#     # Simulate a conversation
+#     responses = []
+#     queries = [
+#         "我想要一件夏天的连衣裙",
+#         "颜色要是蓝色的",
+#         "价格不要太贵",
+#         "给我推荐一下"
+#     ]
 
-    for query in queries:
-        print(f"\nUser: {query}")
-        agent_response = mcp_manager.process_user_input(query)
-        print(f"Agent: {agent_response}")
-        responses.append(agent_response)
+#     for query in queries:
+#         print(f"\nUser: {query}")
+#         agent_response = mcp_manager.process_user_input(query)
+#         print(f"Agent: {agent_response}")
+#         responses.append(agent_response)
 
-    print("\n--- Conversation History (Short-term) ---")
-    for msg in mcp_manager.memory_manager.get_short_term_memory():
-        print(f"{msg['role']}: {msg['content']}")
+#     print("\n--- Conversation History (Short-term) ---")
+#     for msg in mcp_manager.memory_manager.get_short_term_memory():
+#         print(f"{msg['role']}: {msg['content']}")
 
     # Clean up test data (optional)
     # db_instance = Database()

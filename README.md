@@ -1,269 +1,214 @@
-# 电商导购Agent
+# 电商导购 Agent
 
-本项目旨在使用 Python、LangChain、DeepSeek LLM 和 MySQL 数据库，实现一个智能电商导购 Agent。该 Agent 能够理解用户需求，进行多轮对话以提供个性化推荐，并利用检索增强生成（RAG）系统。
+基于 **ReAct + RAG** 架构的智能电商导购助手，使用 DeepSeek LLM、LangChain、ChromaDB 和 MySQL 构建。Agent 能够理解自然语言需求，通过工具自主决策，进行多轮对话并提供个性化商品推荐。
 
-## 1. 项目概述
+---
 
-此 Agent 充当智能购物向导，具备以下能力：
-*   通过自然语言理解用户需求。
-*   进行多轮对话以收集必要信息。
-*   使用 ReAct 风格的推理引擎做出明智决策。
-*   从 MySQL 支持的 RAG 系统中检索相关产品信息。
-*   利用各种技能（过滤、推荐、比较、自检）。
-*   通过分层记忆系统维护用户上下文和偏好。
-
-## 2. 核心功能
-
-*   **RAG（检索增强生成）**: 混合检索（向量 + 关键词）和重排序，实现精准的产品搜索。
-*   **ReAct（推理 + 行动）**: 未来将集成，用于高级决策和工具使用。
-*   **分层记忆**: 短期记忆（会话历史），长期记忆（用户偏好、MySQL 中的历史交互）。
-*   **MCP（多轮对话控制协议）**: 管理对话流程、上下文和信息收集。
-*   **技能框架**: 模块化和可扩展的工具集，用于特定任务（过滤、推荐、比较、自省）。
-*   **DeepSeek LLM 集成**: 利用 DeepSeek 模型进行自然语言理解和生成。
-*   **MySQL 存储**: 所有持久化数据（产品目录、标签、用户记忆）都存储在 MySQL 数据库中。
-
-## 3. 项目结构
+## 架构概览
 
 ```
-ecommerce_shopping_agent/
-├── main.py                 # 项目入口，命令行交互
-├── config.py               # 全局配置
-├── requirements.txt        # Python 依赖项
-├── .env                    # 环境变量（本地设置）
-├── database.py             # MySQL 数据库连接和 CRUD 操作
-├── agent_core/             # Agent 核心模块
-│   ├── __init__.py
-│   ├── react_agent.py      # DeepSeek LLM 集成（将演变为 ReAct 引擎）
-│   ├── memory_manager.py   # 分层记忆管理（长期记忆在 MySQL 中）
-│   ├── mcp_manager.py      # 多轮对话控制
-│   ├── state_machine.py    # 对话状态机
-│   └── skill_router.py     # 技能路由和执行
-├── rag_module/             # RAG 检索模块
-│   ├── __init__.py
-│   ├── data_processor.py   # 从 MySQL 加载产品数据并转换为 LangChain Document
-│   ├── hybrid_retriever.py # 多路径检索（向量 + 关键词）
-│   ├── reranker.py         # 结果重排序
-│   └── vector_store.py     # ChromaDB 向量存储管理
-├── skills/                 # 技能工具集
-│   ├── __init__.py
-│   ├── filter_skills.py    # 价格/标签/约束过滤
-│   ├── recommend_skills.py # 匹配/个性化推荐
-│   ├── compare_skills.py   # 商品比较
-│   └── check_skills.py     # 自省/验证技能
-├── data/                   # 数据相关文件
-│   └── prompt_templates.py # Prompt 模板
-└──  user_memory/            # 占位符（长期记忆在 MySQL 中）
+用户输入
+    ↓
+main.py  →  MCPManager.process_user_input()
+                ↓  记忆写入 + 历史摘要 + 偏好增强
+            ReActAgentEngine.run()
+                ↓  Thought → Action → Observation 循环
+            tools/tool_loader  （Agent 接口适配层）
+                ↓  按意图自动选择工具
+    ┌───────────┬───────────┬───────────┬──────────────┐
+recommend   filter    compare   self_reflection
+    ↓           ↓           ↓           ↓
+skills/  →  MySQL / ChromaDB(向量+BM25) / DeepSeek LLM
 ```
 
-## 4. 设置说明
+**分层设计：**
 
-### 先决条件
+| 层 | 目录/文件 | 职责 |
+|---|---|---|
+| 入口 & CLI | `main.py` | 交互循环，生命周期管理 |
+| 对话协调 | `agent_core/mcp_manager.py` | 记忆管理、偏好增强、Agent 调度 |
+| 推理引擎 | `agent_core/react_agent.py` | ReAct 循环（Thought/Action/Observation） |
+| 工具适配 | `tools/` | 将 skills 包装为 Agent 可调用的 Tool，处理字符串 I/O |
+| 业务技能 | `skills/` | 推荐、过滤、对比、自省的具体实现 |
+| 检索 | `rag_module/` | BM25 + 向量混合检索，Cross-Encoder 重排序 |
+| 记忆 | `agent_core/memory_manager.py` | 短期（会话列表）+ 长期（MySQL）+ 滚动摘要压缩 |
 
-*   Python 3.10+
-*   MySQL 服务器（例如：XAMPP、Docker 或独立安装）
-*   DeepSeek API 密钥
+---
 
-### 虚拟环境
+## 核心能力
+
+- **ReAct 自主决策**：Agent 根据用户意图自动选择工具（推荐/过滤/对比/自省），无需硬编码分支
+- **混合检索（Hybrid RAG）**：BM25 关键词 + 向量语义双路召回，RRF 融合排序，Cross-Encoder 精排
+- **分层记忆**：短期会话历史 + 长期偏好/禁忌持久化到 MySQL，超出阈值时 LLM 自动生成滚动摘要
+- **个性化增强**：用户偏好和禁忌商品在每次查询前自动拼入，引导检索和推荐方向
+- **自我反思**：推荐完成后可调用 `self_reflection_check`，由 LLM 评估推荐质量
+
+---
+
+## 项目结构
+
+```
+├── main.py                      # 入口：CLI 交互循环
+├── config.py                    # 全局配置（读取 .env）
+├── database.py                  # MySQL 单例连接，自动建库建表
+├── requirements.txt
+├── .env                         # 本地凭据（不提交到 Git）
+│
+├── agent_core/
+│   ├── react_agent.py           # ReActAgentEngine + DeepSeekLLM
+│   ├── mcp_manager.py           # 对话协调：记忆 + 偏好 + Agent 调度
+│   ├── memory_manager.py        # 短期/长期记忆读写、LLM 摘要压缩
+│   └── skill_router.py          # 技能注册与执行路由
+│
+├── tools/                       # Agent 接口适配层（skills → LangChain Tool）
+│   ├── tool_loader.py           # 聚合所有工具，暴露 get_all_tools(user_id)
+│   ├── recommend_tools.py       # 封装推荐类技能
+│   ├── filter_tools.py          # 封装过滤/校验类技能
+│   ├── compare_tools.py         # 封装对比类技能
+│   └── check_tools.py           # 封装自省类技能
+│
+├── skills/                      # 业务逻辑层
+│   ├── recommend_skills.py      # 需求匹配推荐 + 个性化推荐（RAG）
+│   ├── filter_skills.py         # 多条件 SQL 过滤 + 约束校验
+│   ├── compare_skills.py        # 商品参数对比
+│   └── check_skills.py          # LLM 自我反思评估
+│
+├── rag_module/
+│   ├── hybrid_retriever.py      # BM25 + 向量双路 + RRF 融合 + Reranker
+│   ├── vector_store.py          # ChromaDB 向量库（自动建库/增量同步）
+│   ├── reranker.py              # Cross-Encoder 重排序
+│   └── data_processor.py        # MySQL → LangChain Document 转换
+│
+└── data/
+    ├── prompt_templates.py      # format_chat_history() 工具函数
+    ├── goods_data.json          # 初始商品种子数据
+    └── tag_library.json         # 初始标签库种子数据
+```
+
+---
+
+## 快速开始
+
+### 1. 环境准备
 
 ```bash
 python -m venv .venv
-# 在 Windows 上
+# Windows
 .venv\Scripts\activate
-# 在 macOS/Linux 上
+# macOS / Linux
 source .venv/bin/activate
-```
 
-### 依赖项
-
-安装所需的 Python 包：
-
-```bash
 pip install -r requirements.txt
 ```
 
-### 环境变量 (.env)
+### 2. 配置 `.env`
 
-在项目根目录创建 `.env` 文件，并填写您的凭据和配置。请确保将占位符替换为您的实际值。
+在项目根目录创建 `.env` 文件：
 
 ```env
-DEEPSEEK_API_KEY="YOUR_DEEPSEEK_API_KEY"
+# DeepSeek API
+DEEPSEEK_API_KEY="your_deepseek_api_key"
+DEEPSEEK_MODEL_NAME="deepseek-chat"
+LLM_TEMPERATURE=0.0
 
+# MySQL
 MYSQL_HOST="localhost"
 MYSQL_USER="root"
-MYSQL_PASSWORD="YOUR_MYSQL_ROOT_PASSWORD" # 或者专用用户的密码
+MYSQL_PASSWORD="your_password"
 MYSQL_DB="ecommerce_agent"
 MYSQL_PORT=3306
 
-# Langchain 相关（可选，用于跟踪）
-LANGCHAIN_TRACING_V2="false"
-LANGCHAIN_API_KEY=""
-LANGCHAIN_PROJECT="E-commerce Shopping Agent"
-LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
+# ChromaDB
+CHROMA_DB_PATH="./chroma_db"
+COLLECTION_NAME="ecommerce_goods"
 
-# Ollama (如果您仍想将其用于其他目的或本地测试)
-# OLLAMA_MODEL="qwen2.5:7b"
-# OLLAMA_HOST="http://127.0.0.1:11434"
-
-# RAG 配置
+# 嵌入模型（BGE，需提前下载或联网拉取）
 EMBEDDING_MODEL_NAME="BAAI/bge-large-zh-v1.5"
-EMBEDDING_MODEL_DEVICE="cpu" # 如果没有 CUDA GPU，则为 "cpu"
+EMBEDDING_MODEL_DEVICE="cpu"
+
+# 重排序模型
 RERANKER_MODEL_NAME="BAAI/bge-reranker-large"
-RERANKER_MODEL_DEVICE="cpu" # 或 "cpu"
-RETRIEVER_K=20
+RERANKER_MODEL_DEVICE="cpu"
 RERANKER_TOP_N=5
 
-# Agent 特有配置
-RECOMMENDATION_COUNT=3
-SELF_REFLECTION_ENABLED="True"
+# 检索配置
+RETRIEVER_K=20
+BM25_ENABLED="True"
+ENSEMBLE_VECTOR_WEIGHT="0.5"
 RERANKING_ENABLED="True"
 
-# ChromaDB 持久化路径
-CHROMA_DB_PATH="./chroma_db"
+# Agent 行为
+RECOMMENDATION_COUNT=3
+SELF_REFLECTION_ENABLED="True"
+
+# 记忆压缩
+MEMORY_COMPRESSION_THRESHOLD=10
+MEMORY_COMPRESSION_KEEP_RECENT=4
 
 # 日志
 LOG_LEVEL="INFO"
 DEBUG_MODE="False"
 ```
 
-### MySQL 数据库设置
+### 3. 数据库初始化
 
-确保您的 MySQL 服务器正在运行。当应用程序连接时，`database.py` 脚本将尝试创建 `ecommerce_agent` 数据库和必要的表（`goods`、`tag_library`、`user_memory`）（如果它们不存在）。您需要在 `.env` 文件中提供具有创建数据库和表权限的相应 MySQL 用户凭据。
-
-或者，您可以使用 MySQL 客户端（例如：MySQL Workbench、DBeaver 或命令行）手动创建数据库和表：
-
-1.  **连接到 MySQL** 作为具有足够权限的用户（例如 `root`）。
-
-2.  **创建数据库**：
-    ```sql
-    CREATE DATABASE IF NOT EXISTS ecommerce_agent CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-    USE ecommerce_agent;
-    ```
-
-3.  **创建表**：
-    ```sql
-    CREATE TABLE `goods` (
-        `goods_id` VARCHAR(50) PRIMARY KEY NOT NULL,
-        `name` VARCHAR(255) NOT NULL,
-        `category` VARCHAR(100),
-        `price` DECIMAL(10, 2),
-        `brand` VARCHAR(100),
-        `scene` JSON, -- 存储为 JSON 字符串数组
-        `person` JSON, -- 存储为 JSON 字符串数组
-        `style` JSON, -- 存储为 JSON 字符串数组
-        `tags` JSON, -- 存储为 JSON 字符串数组
-        `feature` TEXT,
-        `advantage` TEXT,
-        `disadvantage` TEXT,
-        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE `tag_library` (
-        `tag_id` INT AUTO_INCREMENT PRIMARY KEY,
-        `tag_type` VARCHAR(100) NOT NULL, -- 例如: "scene", "person", "style", "budget", "usage"
-        `tag_name` VARCHAR(100) NOT NULL UNIQUE,
-        `description` TEXT,
-        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE `user_memory` (
-        `user_id` VARCHAR(50) PRIMARY KEY NOT NULL,
-        `preferences` JSON, -- 用户偏好（例如：预算、风格、品牌）
-        `forbidden_items` JSON, -- 用户不喜欢的商品或类别
-        `chat_history` JSON, -- 长期上下文的聊天历史摘要或完整记录
-        `last_active_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    ```
-
-### 插入示例数据
-
-为了使 RAG 系统和技能正常工作，您需要向 `goods` 和 `tag_library` 表填充一些数据。以下是示例 `INSERT` 语句。您可以使用 MySQL 客户端执行这些语句。
-
-**示例 `goods` 数据：**
+启动 MySQL 后直接运行项目，`database.py` 会自动创建数据库和以下三张表：
 
 ```sql
-INSERT INTO `goods` (goods_id, name, category, price, brand, scene, person, style, tags, feature, advantage, disadvantage)
-VALUES
-('G001', '简约通勤帆布包', '包包', 159.00, '平价', '["通勤","上学"]', '["女生","学生","上班族"]', '["简约","百搭"]', '["性价比","送礼"]', '大容量耐磨', '轻便耐用', '无防水'),
-('G002', '时尚潮流双肩包', '包包', 299.00, '潮流品牌', '["休闲","旅行"]', '["学生","青年"]', '["时尚","街头"]', '["多功能","防水"]', '多隔层设计', '时尚耐用，适合旅行', '自重稍大'),
-('G003', '商务真皮公文包', '包包', 899.00, '高端品牌', '["商务","会议"]', '["上班族","商务人士"]', '["商务","精英"]', '["真皮","品质"]', '多功能分区，可放电脑', '质感高级，彰显品味', '价格较高'),
-('G004', '夏季清凉雪纺连衣裙', '服装', 188.00, '快时尚', '["日常","约会"]', '["女生","青年"]', '["甜美","休闲"]', '["透气","舒适"]', '轻薄面料，不贴身', '穿着舒适，款式时尚', '易皱，需手洗'),
-('G005', '户外运动跑步鞋', '鞋子', 450.00, '专业运动', '["运动","户外"]', '["运动爱好者","男士"]', '["功能性","科技感"]', '["减震","防滑"]', '专业缓震技术', '保护性强，抓地力好', '日常搭配受限');
+-- 商品表
+goods (goods_id, name, category, price, brand,
+       scene JSON, person JSON, style JSON, tags JSON,
+       feature, advantage, disadvantage)
+
+-- 标签库
+tag_library (tag_id, tag_type, tag_name, description)
+
+-- 用户记忆
+user_memory (user_id, preferences JSON, forbidden_items JSON,
+             chat_history TEXT, last_active_at, created_at)
 ```
 
-**示例 `tag_library` 数据：**
+**插入示例商品数据：**
 
 ```sql
-INSERT INTO `tag_library` (tag_type, tag_name, description)
+INSERT INTO goods (goods_id, name, category, price, brand, scene, person, style, tags, feature, advantage, disadvantage)
 VALUES
-('scene', '通勤', '适合日常上下班或上学的场景'),
-('scene', '上学', '适合学生日常使用的场景'),
-('scene', '休闲', '适合放松休闲的日常场合'),
-('scene', '旅行', '适合出门旅行或短期出差的场景'),
-('scene', '商务', '适合正式商务场合'),
-('scene', '约会', '适合情侣约会或朋友聚会'),
-('scene', '运动', '适合体育锻炼和户外活动'),
-('person', '女生', '适合女性用户'),
-('person', '学生', '适合学生群体'),
-('person', '上班族', '适合办公室工作人员'),
-('person', '青年', '适合年轻用户'),
-('person', '商务人士', '适合从事商务活动的人群'),
-('person', '运动爱好者', '适合热爱运动的人群'),
-('person', '男士', '适合男性用户'),
-('style', '简约', '设计简洁，不花哨'),
-('style', '百搭', '容易搭配各种服饰'),
-('style', '时尚', '符合当前流行趋势'),
-('style', '街头', '具有街头潮流风格'),
-('style', '商务', '正式、专业的风格'),
-('style', '精英', '高端、品质的风格'),
-('style', '甜美', '可爱、柔和的风格'),
-('style', '休闲', '轻松、随意的风格'),
-('style', '潮流', '引领时尚前沿'),
-('style', '功能性', '注重实用和特定功能'),
-('style', '科技感', '具有高科技元素的风格'),
-('tags', '性价比', '价格合理，性能优越'),
-('tags', '送礼', '适合作为礼物赠送'),
-('tags', '多功能', '具有多种用途或功能'),
-('tags', '防水', '具备防水特性'),
-('tags', '真皮', '采用真皮材质'),
-('tags', '品质', '产品质量上乘'),
-('tags', '透气', '材质透气性好'),
-('tags', '舒适', '穿着或使用感受良好'),
-('tags', '减震', '具备减震功能'),
-('tags', '防滑', '具备防滑功能');
+('G001','简约通勤帆布包','包包',159.00,'平价','["通勤","上学"]','["女生","学生","上班族"]','["简约","百搭"]','["性价比","送礼"]','大容量耐磨','轻便耐用','无防水'),
+('G002','时尚潮流双肩包','包包',299.00,'潮流品牌','["休闲","旅行"]','["学生","青年"]','["时尚","街头"]','["多功能","防水"]','多隔层设计','时尚耐用，适合旅行','自重稍大'),
+('G003','商务真皮公文包','包包',899.00,'高端品牌','["商务","会议"]','["上班族","商务人士"]','["商务","精英"]','["真皮","品质"]','多功能分区，可放电脑','质感高级，彰显品味','价格较高'),
+('G004','夏季清凉雪纺连衣裙','服装',188.00,'快时尚','["日常","约会"]','["女生","青年"]','["甜美","休闲"]','["透气","舒适"]','轻薄面料，不贴身','穿着舒适，款式时尚','易皱，需手洗'),
+('G005','户外运动跑步鞋','鞋子',450.00,'专业运动','["运动","户外"]','["运动爱好者","男士"]','["功能性","科技感"]','["减震","防滑"]','专业缓震技术','保护性强，抓地力好','日常搭配受限');
 ```
 
-## 5. 如何运行 Agent
+### 4. 运行
 
-1.  **激活您的虚拟环境**（如果尚未激活）：
-    ```bash
-    # 在 Windows 上
-    .venv\Scripts\activate
-    # 在 macOS/Linux 上
-    source .venv/bin/activate
-    ```
+```bash
+python main.py
+# 指定用户 ID（用于隔离记忆数据）
+python main.py --user_id alice
+```
 
-2.  **运行主应用程序**：
-    ```bash
-    python main.py --user_id your_unique_user_id
-    ```
-    将 `your_unique_user_id` 替换为您希望用于会话的任何标识符。此 ID 将用于在数据库中管理您的长期记忆。
+**交互示例：**
 
-3.  在命令行中**与 Agent 交互**。输入您的查询并按 Enter 键。输入 `exit` 或 `quit` 结束会话。
+```
+您有什么需求？ 给我推荐一款适合上班族用的简约风格包包
+您有什么需求？ 帮我比较一下 G001 和 G003
+您有什么需求？ 价格在 200 元以内的包包有哪些
+您有什么需求？ exit
+```
 
-    交互示例：
-    ```
-    您有什么需求？ 给我推荐一款适合上班族用的简约风格包包
-    ```
+---
 
-## 6. 未来增强
+## 技术栈
 
-*   实现完整的 ReAct Agent，支持动态工具调用。
-*   更高级的多轮对话管理（缺失信息检测、指代消解）。
-*   更复杂的个性化推荐逻辑。
-*   在 `CompareSkills` 中集成 LLM 进行优缺点总结。
-*   实时日志记录到文件。
-*   基于 Web 的 UI，实现更丰富的交互。
-*   更强大的错误处理和输入验证。
+| 组件 | 技术 |
+|---|---|
+| LLM | DeepSeek Chat（via `langchain-deepseek`） |
+| 向量嵌入 | BAAI/bge-large-zh-v1.5（HuggingFace） |
+| 重排序 | BAAI/bge-reranker-large（Cross-Encoder） |
+| 向量数据库 | ChromaDB（持久化） |
+| 关键词检索 | rank_bm25（字符级中文分词） |
+| 检索融合 | EnsembleRetriever（RRF，c=60） |
+| Agent 框架 | LangChain ReAct（create_react_agent + AgentExecutor） |
+| 关系数据库 | MySQL 8.0+（商品、标签、用户记忆） |
+| 配置管理 | python-dotenv |
