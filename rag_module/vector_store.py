@@ -63,7 +63,7 @@ class VectorStoreManager:
         """
         # 第一步：加载嵌入模型，后续建库和检索均依赖此模型
         self.embedding_model = self._initialize_embedding_model()
-        # 第二步：基于嵌入模型初始化或加载向量库
+        # 第二步：基于嵌入模型初始化且加载向量库
         self.vectorstore = self._initialize_vectorstore()
 
     def _initialize_embedding_model(self):
@@ -116,7 +116,7 @@ class VectorStoreManager:
             # ── 首次运行：从零创建向量库 ──────────────────────────────────
             logging.info(f"Chroma DB not found at {Config.CHROMA_DB_PATH}, creating new one...")
 
-            # 通过 DataProcessor 从 MySQL 拉取商品数据并转换为 LangChain Document
+            # 创建数据处理器-》获取db数据库实例-》加载货物-》documents[content, metadata]
             data_processor = DataProcessor()
             documents = data_processor.load_and_process_goods()
 

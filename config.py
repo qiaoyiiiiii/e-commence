@@ -147,6 +147,14 @@ class Config:
     # 是否启用重排序（Reranking）：对检索结果进行精排后再传入 LLM
     RERANKING_ENABLED = os.getenv("RERANKING_ENABLED", "True").lower() == "true"
 
+    # 是否启用 BM25 稀疏检索（关键词匹配），与向量检索做 RRF 融合
+    # 关闭后退化为纯向量检索；开启时会从 MySQL 额外加载一次文档建立内存索引
+    BM25_ENABLED = os.getenv("BM25_ENABLED", "True").lower() == "true"
+
+    # EnsembleRetriever RRF 融合时向量检索的权重（0~1）
+    # BM25 权重 = 1 - ENSEMBLE_VECTOR_WEIGHT；两者各 0.5 时等权融合
+    ENSEMBLE_VECTOR_WEIGHT = float(os.getenv("ENSEMBLE_VECTOR_WEIGHT", "0.5"))
+
     # -------------------------------------------------------------------------
     # 8. 记忆压缩策略配置
     # -------------------------------------------------------------------------

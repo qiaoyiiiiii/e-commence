@@ -1,4 +1,5 @@
 langchain
+langchain-core
 langchain-community
 chromadb
 sentence-transformers
@@ -9,3 +10,4 @@ json5
 logging
 mysql-connector-python
 langchain-deepseek
+rank_bm25
