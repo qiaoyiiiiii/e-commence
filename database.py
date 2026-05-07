@@ -19,6 +19,9 @@ class Database:
         """ Establishes a database connection. """
         if self.connection is None or not self.connection.is_connected():
             try:
+                # Must ensure the database exists before connecting to it;
+                # connecting with database= raises "Unknown database" if it doesn't exist yet.
+                self._create_database_if_not_exists()
                 self.connection = mysql.connector.connect(
                     host=Config.MYSQL_HOST,
                     database=Config.MYSQL_DB,
@@ -28,8 +31,6 @@ class Database:
                 )
                 if self.connection.is_connected():
                     logging.info(f"Successfully connected to MySQL database: {Config.MYSQL_DB}")
-                    # Ensure the database and tables exist
-                    self._create_database_if_not_exists()
                     self._create_tables_if_not_exists()
                 else:
                     logging.error("Failed to connect to MySQL database.")
@@ -47,14 +48,16 @@ class Database:
                 port=Config.MYSQL_PORT
             )
             cursor = temp_conn.cursor()
-            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {Config.MYSQL_DB}")
-            logging.info(f"Database '{Config.MYSQL_DB}' ensured to exist.")
+            cursor.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{Config.MYSQL_DB}` "
+                f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
             cursor.close()
             temp_conn.close()
-            # Reconnect to the specific database
-            self.connect()
+            logging.info(f"Database '{Config.MYSQL_DB}' ensured to exist.")
         except Error as e:
-            logging.error(f"Error creating database {Config.MYSQL_DB}: {e}")
+            logging.error(f"Error ensuring database '{Config.MYSQL_DB}' exists: {e}")
+            raise
 
     def _create_tables_if_not_exists(self):
         """ Creates necessary tables if they do not exist. """
