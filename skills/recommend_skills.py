@@ -15,6 +15,16 @@ class RecommendSkills:
         self.hybrid_retriever_manager = HybridRetrieverManager()
         self.retriever = self.hybrid_retriever_manager.get_retriever()
 
+    def _parse_json_fields(self, good_data: Dict[str, Any]) -> None:
+        """Converts JSON string fields to Python lists in-place."""
+        for key in ['scene', 'person', 'style', 'tags']:
+            if good_data.get(key) and isinstance(good_data[key], str):
+                try:
+                    good_data[key] = json.loads(good_data[key])
+                except json.JSONDecodeError:
+                    logging.warning(f"Could not decode JSON for {key} in good {good_data.get('goods_id')}")
+                    good_data[key] = []
+
     def recommend_by_demand_matching(self, 
                                      user_query: str,
                                      user_id: str = "default_user",
@@ -31,14 +41,7 @@ class RecommendSkills:
         for doc in retrieved_docs:
             # Assuming metadata contains all original good details
             good_data = doc.metadata
-            # Convert JSON string fields back to Python objects if they were not already
-            for key in ['scene', 'person', 'style', 'tags']:
-                if good_data.get(key) and isinstance(good_data[key], str):
-                    try:
-                        good_data[key] = json.loads(good_data[key])
-                    except json.JSONDecodeError:
-                        logging.warning(f"Could not decode JSON for {key} in good {good_data.get('goods_id')}")
-                        pass # Keep as string if decoding fails
+            self._parse_json_fields(good_data)
             recommended_goods.append(good_data)
             if len(recommended_goods) >= limit:
                 break
@@ -94,14 +97,7 @@ class RecommendSkills:
                         is_forbidden = True
                         break
             if not is_forbidden:
-                # Convert JSON string fields back to Python objects if they were not already
-                for key in ['scene', 'person', 'style', 'tags']:
-                    if good_data.get(key) and isinstance(good_data[key], str):
-                        try:
-                            good_data[key] = json.loads(good_data[key])
-                        except json.JSONDecodeError:
-                            logging.warning(f"Could not decode JSON for {key} in good {good_data.get('goods_id')}")
-                            pass # Keep as string if decoding fails
+                self._parse_json_fields(good_data)
                 recommended_goods.append(good_data)
                 if len(recommended_goods) >= limit:
                     break

@@ -48,7 +48,6 @@ class VectorStoreManager:
                 persist_directory=Config.CHROMA_DB_PATH,
                 collection_name=Config.COLLECTION_NAME
             )
-            vectorstore.persist()
             logging.info("Chroma DB created and persisted with goods data.")
         else:
             logging.info(f"Loading existing Chroma DB from {Config.CHROMA_DB_PATH}...")
@@ -70,7 +69,6 @@ class VectorStoreManager:
         """ Adds new documents to the vector store. """
         if self.vectorstore:
             self.vectorstore.add_documents(documents)
-            self.vectorstore.persist()
             logging.info(f"Added {len(documents)} documents to the vector store.")
         else:
             logging.error("Vector store not initialized. Cannot add documents.")

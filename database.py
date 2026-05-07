@@ -98,6 +98,7 @@ class Database:
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         """
+        cursor = None
         try:
             cursor = self.connection.cursor()
             cursor.execute(goods_table_query)
@@ -108,7 +109,7 @@ class Database:
         except Error as e:
             logging.error(f"Error creating tables: {e}")
         finally:
-            if 'cursor' in locals() and cursor:
+            if cursor:
                 cursor.close()
 
     def close(self):

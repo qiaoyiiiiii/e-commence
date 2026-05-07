@@ -7,9 +7,9 @@ RAG_PROMPT_TEMPLATE = PromptTemplate(
 参考文档：
 {context}
 
-问题：{input}
+{chat_history}问题：{input}
 回答：""",
-    input_variables=["context", "input"]
+    input_variables=["context", "chat_history", "input"]
 )
 
 # ReAct Agent Prompt Template (Placeholder - will be more complex later)

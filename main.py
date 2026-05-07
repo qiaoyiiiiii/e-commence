@@ -12,7 +12,7 @@ from config import Config
 from database import Database
 from agent_core.react_agent import DeepSeekLLM
 from rag_module.hybrid_retriever import HybridRetrieverManager
-from data.prompt_templates import RAG_PROMPT_TEMPLATE
+from data.prompt_templates import RAG_PROMPT_TEMPLATE, format_chat_history
 from agent_core.memory_manager import MemoryManager
 from agent_core.mcp_manager import MCPManager
 
@@ -93,11 +93,16 @@ def run_agent_cli(user_id: str = "default_user"):
         try:
             mcp_manager.memory_manager.add_message_to_short_term_memory("user", user_input)
 
+            # Build conversation history context (exclude the just-added user message)
+            history = mcp_manager.memory_manager.get_short_term_memory()[:-1]
+            chat_history_str = format_chat_history(history)
+            chat_history_block = f"对话历史：\n{chat_history_str}\n\n" if chat_history_str else ""
+
             # Enrich the query with the user's long-term preferences and forbidden items
             memory_hint = mcp_manager.get_memory_context_hint()
             query_input = f"{user_input}。[{memory_hint}]" if memory_hint else user_input
 
-            response = rag_chain.invoke({"input": query_input})
+            response = rag_chain.invoke({"input": query_input, "chat_history": chat_history_block})
             answer = response["answer"]
             context_docs = response["context"]
 

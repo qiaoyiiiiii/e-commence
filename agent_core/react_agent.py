@@ -75,19 +75,8 @@ class ReActAgentEngine:
         
         for skill_name in registered_skills:
             def skill_wrapper(query, name=skill_name):
-                # Note: In a real scenario, we might need to parse 'query' into specific kwargs for the skill
-                # For now, we pass a generic query or empty dict if the skill doesn't need complex parsing
-                # A more advanced implementation would use an LLM to extract parameters from the query for each skill
                 try:
-                    # Simple heuristic: if skill needs specific args, this might fail or need refinement
-                    # For demonstration, we assume skills can handle a generic 'query' or we pass empty
-                    # Ideally, each tool should have a defined argument schema
-                    if name == "filter_goods_by_criteria":
-                         # Example of mapping natural language to structured args would go here
-                         # For now, just returning a placeholder or executing with defaults
-                         return skill_router.execute_skill(name) 
-                    else:
-                        return skill_router.execute_skill(name)
+                    return skill_router.execute_skill(name, user_query=query)
                 except Exception as e:
                     return f"Error executing skill {name}: {str(e)}"
 
