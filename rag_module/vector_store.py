@@ -116,14 +116,16 @@ class VectorStoreManager:
             # ── 首次运行：从零创建向量库 ──────────────────────────────────
             logging.info(f"Chroma DB not found at {Config.CHROMA_DB_PATH}, creating new one...")
 
-            # 创建数据处理器-》获取db数据库实例-》加载货物-》documents[content, metadata]
             data_processor = DataProcessor()
             documents = data_processor.load_and_process_goods()
 
             if not documents:
-                # 数据库中暂无商品数据，创建空向量库以保证系统可正常启动；
-                # 后续可通过 add_documents 方法动态补充文档
-                logging.warning("No documents to add to vector store. Ensure goods data is in MySQL.")
+                # MySQL 暂无商品数据：先建空库保证系统可正常启动，
+                # 后续商品入库后调用 sync_from_mysql() 或 add_documents() 补全向量索引
+                logging.warning(
+                    "No documents found in MySQL. Creating empty vector store. "
+                    "Call sync_from_mysql() after populating MySQL to index goods."
+                )
                 return Chroma(
                     embedding_function=self.embedding_model,
                     persist_directory=Config.CHROMA_DB_PATH,
@@ -137,7 +139,7 @@ class VectorStoreManager:
                 persist_directory=Config.CHROMA_DB_PATH,
                 collection_name=Config.COLLECTION_NAME
             )
-            logging.info("Chroma DB created and persisted with goods data.")
+            logging.info(f"Chroma DB created with {len(documents)} documents.")
         else:
             # ── 非首次运行：直接加载已有向量库 ───────────────────────────
             logging.info(f"Loading existing Chroma DB from {Config.CHROMA_DB_PATH}...")
@@ -147,6 +149,26 @@ class VectorStoreManager:
                 collection_name=Config.COLLECTION_NAME
             )
             logging.info("Chroma DB loaded.")
+
+            # ── 自动补全：向量库为空但 MySQL 已有数据时自动填充 ───────────
+            # 场景：首次启动时 MySQL 为空建了空库，之后 MySQL 导入了商品数据，
+            # 下次重启应自动将这批数据索引进向量库，无需手动干预
+            doc_count = vectorstore._collection.count()
+            if doc_count == 0:
+                logging.info(
+                    "Vector store is empty. Attempting to auto-populate from MySQL..."
+                )
+                try:
+                    documents = DataProcessor().load_and_process_goods()
+                    if documents:
+                        vectorstore.add_documents(documents)
+                        logging.info(
+                            f"Auto-populated vector store with {len(documents)} documents."
+                        )
+                    else:
+                        logging.info("MySQL also empty; vector store remains empty.")
+                except Exception as e:
+                    logging.warning(f"Auto-populate failed (system will continue): {e}")
 
         return vectorstore
 
@@ -191,6 +213,49 @@ class VectorStoreManager:
             # 正常情况下 __init__ 保证 vectorstore 已初始化，此分支为防御性处理
             logging.error("Vector store not initialized. Cannot add documents.")
 
+    def sync_from_mysql(self) -> int:
+        """
+        全量同步：清空向量库并以 MySQL 当前商品数据重建索引。
+
+        适用场景：
+            - 商品信息（名称、描述、标签）批量更新后需要刷新向量索引。
+            - MySQL 导入了大批新商品，且不希望出现向量库中存在已下架商品的情况。
+
+        实现方式：
+            删除整个 ChromaDB Collection 后重建，再批量写入最新的商品文档。
+            因此，调用期间检索器会短暂返回空结果；生产环境建议在低峰期执行。
+
+        返回：
+            int：成功写入向量库的文档数量；MySQL 无数据时返回 0。
+
+        副作用：
+            - 向量库中原有的所有文档将被删除并以最新数据替换。
+            - 操作完成后 self.vectorstore 指向重建后的新集合实例。
+        """
+        logging.info("Starting full sync: dropping existing collection and rebuilding from MySQL...")
+        try:
+            documents = DataProcessor().load_and_process_goods()
+        except Exception as e:
+            logging.error(f"sync_from_mysql: failed to load documents from MySQL: {e}")
+            return 0
+
+        if not documents:
+            logging.warning("sync_from_mysql: no documents found in MySQL, sync aborted.")
+            return 0
+
+        # 删除旧集合（包含所有向量数据），然后重建空集合
+        self.vectorstore.delete_collection()
+        self.vectorstore = Chroma(
+            persist_directory=Config.CHROMA_DB_PATH,
+            embedding_function=self.embedding_model,
+            collection_name=Config.COLLECTION_NAME,
+        )
+
+        # 批量写入最新文档
+        self.vectorstore.add_documents(documents)
+        logging.info(f"sync_from_mysql: rebuilt vector store with {len(documents)} documents.")
+        return len(documents)
+
 
 # ── 模块独立运行时的简单演示 ──────────────────────────────────────────────────
 if __name__ == "__main__":
@@ -213,5 +278,9 @@ if __name__ == "__main__":
     # new_documents = DataProcessor().goods_to_langchain_documents(new_goods_data)
     # if new_documents:
     #     vector_manager.add_documents(new_documents)
+
+    # 全量同步示例（商品数据批量更新后使用）：
+    # count = vector_manager.sync_from_mysql()
+    # print(f"Synced {count} documents from MySQL.")
 
     print("VectorStoreManager example complete.")
