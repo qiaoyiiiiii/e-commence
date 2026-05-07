@@ -172,9 +172,6 @@ class Config:
     # 商品数据 JSON 文件路径，用于首次向数据库和向量库导入商品信息
     GOODS_DATA_PATH = os.getenv("GOODS_DATA_PATH", "./data/goods_data.json")
 
-    # 标签库 JSON 文件路径，用于初始化标签分类体系
-    TAG_LIBRARY_PATH = os.getenv("TAG_LIBRARY_PATH", "./data/tag_library.json")
-
     # -------------------------------------------------------------------------
     # 10. 日志配置
     # -------------------------------------------------------------------------

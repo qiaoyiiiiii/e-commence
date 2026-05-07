@@ -18,7 +18,6 @@
 使用方式：
     processor = DataProcessor()
     documents = processor.load_and_process_goods()   # 获取可直接入库的文档列表
-    tags      = processor.load_tag_library_from_mysql()  # 获取标签库
 """
 
 import json
@@ -86,10 +85,9 @@ class DataProcessor:
         1. 从 MySQL 的 goods 表查询商品数据，并解析其中的 JSON 字段。
         2. 将商品字典列表转换为 LangChain Document 对象列表，
            同时对 metadata 做类型兼容处理。
-        3. 从 MySQL 的 tag_library 表查询标签数据。
 
     属性：
-        db (Database)：数据库连接实例（单例），用于执行 SQL 查询。
+        db (Database): 数据库连接实例（单例），用于执行 SQL 查询。
     """
 
     def __init__(self):
@@ -211,30 +209,6 @@ class DataProcessor:
         documents = self.goods_to_langchain_documents(goods_data)
         return documents
 
-    def load_tag_library_from_mysql(self) -> List[Dict[str, Any]]:
-        """
-        从 MySQL tag_library 表加载标签库数据。
-
-        标签库用于辅助意图识别、用户偏好提取等上层业务逻辑，
-        本方法仅负责原始数据的读取，不做额外处理。
-
-        返回：
-            List[Dict[str, Any]]：标签字典列表，每个字典对应一条标签记录。
-                若表为空则返回空列表。
-
-        副作用：
-            - 成功时以 INFO 级别记录加载数量。
-            - 无数据时以 WARNING 级别记录警告。
-        """
-        query = "SELECT * FROM tag_library"
-        tag_data = self.db.execute_query(query, fetch_type='all')
-        if tag_data:
-            logging.info(f"Loaded {len(tag_data)} tags from MySQL.")
-            return tag_data
-        logging.warning("No tag library data found in MySQL.")
-        return []
-
-
 # ── 模块独立运行时的简单演示 ──────────────────────────────────────────────────
 if __name__ == "__main__":
     # 运行前提：MySQL 已启动，数据库/表已创建，.env 配置正确
@@ -245,12 +219,6 @@ if __name__ == "__main__":
     print(f"\n--- Processed Goods Documents ({len(goods_docs)}) ---")
     for i, doc in enumerate(goods_docs[:2]):  # 仅打印前 2 条以便快速验证
         print(f"Document {i+1}:\nPage Content: {doc.page_content}\nMetadata: {doc.metadata}\n")
-
-    # 测试标签库加载
-    tag_library = processor.load_tag_library_from_mysql()
-    print(f"\n--- Tag Library ({len(tag_library)}) ---")
-    for tag in tag_library[:2]:  # 仅打印前 2 条
-        print(f"Tag: {tag}\n")
 
     # 注：Database 为单例，程序退出时连接会自动释放；
     # 如需提前释放，可调用 self.db.close()（若该方法已实现）。

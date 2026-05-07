@@ -19,7 +19,6 @@
 
 数据表说明：
     - goods：商品信息表，存储 SKU 级别的商品属性
-    - tag_library：标签库表，维护系统内所有标签的分类与描述
     - user_memory：用户记忆表，持久化用户的偏好、禁忌商品和对话历史
 """
 
@@ -159,16 +158,13 @@ class Database:
             - goods：商品信息表
                 主键：goods_id（VARCHAR）
                 JSON 列：scene、person、style、tags（分别存储适用场景、人群、风格、标签列表）
-            - tag_library：标签库表
-                主键：tag_id（自增整型）
-                唯一约束：tag_name（每个标签名全局唯一）
             - user_memory：用户记忆表
                 主键：user_id（VARCHAR）
                 JSON 列：preferences、forbidden_items、chat_history
 
         行为：
             使用 IF NOT EXISTS 语法，幂等执行，重复调用不会破坏已有数据。
-            三张表在同一事务中提交，保证原子性。
+            两张表在同一事务中提交，保证原子性。
 
         异常：
             捕获 mysql.connector.Error 并记录日志；
@@ -194,18 +190,6 @@ class Database:
         );
         """
 
-        # 标签库表：维护系统内所有标签的类型（scene/person/style 等）和描述
-        tag_library_table_query = """
-        CREATE TABLE IF NOT EXISTS `tag_library` (
-            `tag_id` INT AUTO_INCREMENT PRIMARY KEY,
-            `tag_type` VARCHAR(100) NOT NULL,
-            `tag_name` VARCHAR(100) NOT NULL UNIQUE,
-            `description` TEXT,
-            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        );
-        """
-
         # 用户记忆表：持久化每位用户的长期偏好、禁忌商品和对话历史
         user_memory_table_query = """
         CREATE TABLE IF NOT EXISTS `user_memory` (
@@ -221,9 +205,7 @@ class Database:
         cursor = None
         try:
             cursor = self.connection.cursor()
-            # 依次创建三张表，顺序无强依赖，但保持固定顺序便于维护
             cursor.execute(goods_table_query)
-            cursor.execute(tag_library_table_query)
             cursor.execute(user_memory_table_query)
             # 提交 DDL 事务（MySQL 中 DDL 会隐式提交，此处显式提交以保持一致性）
             self.connection.commit()

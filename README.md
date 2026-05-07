@@ -81,8 +81,7 @@ skills/  →  MySQL / ChromaDB(向量+BM25) / DeepSeek LLM
 │
 └── data/
     ├── prompt_templates.py      # format_chat_history() 工具函数
-    ├── goods_data.json          # 初始商品种子数据
-    └── tag_library.json         # 初始标签库种子数据
+    └── goods_data.json          # 初始商品种子数据
 ```
 
 ---
@@ -152,16 +151,13 @@ DEBUG_MODE="False"
 
 ### 3. 数据库初始化
 
-启动 MySQL 后直接运行项目，`database.py` 会自动创建数据库和以下三张表：
+启动 MySQL 后直接运行项目，`database.py` 会自动创建数据库和以下两张表：
 
 ```sql
 -- 商品表
 goods (goods_id, name, category, price, brand,
        scene JSON, person JSON, style JSON, tags JSON,
        feature, advantage, disadvantage)
-
--- 标签库
-tag_library (tag_id, tag_type, tag_name, description)
 
 -- 用户记忆
 user_memory (user_id, preferences JSON, forbidden_items JSON,
