@@ -12,9 +12,26 @@ class MCPManager:
     def __init__(self, user_id: str):
         self.user_id = user_id
         self.memory_manager = MemoryManager(user_id)
-        self.llm_service = DeepSeekLLM() # Initialize DeepSeek LLM
-        self.llm = self.llm_service.get_llm()
+        self._llm_service = None  # Lazy-initialized only when process_user_input is called
         logging.info(f"MCPManager initialized for user {self.user_id}")
+
+    @property
+    def llm_service(self):
+        if self._llm_service is None:
+            self._llm_service = DeepSeekLLM()
+        return self._llm_service
+
+    def get_memory_context_hint(self) -> str:
+        """Returns a string summarizing user preferences and forbidden items for query enrichment."""
+        preferences = self.memory_manager.get_user_preferences()
+        forbidden_items = self.memory_manager.get_forbidden_items()
+        hints = []
+        if preferences:
+            pref_parts = [f"{k}:{v}" for k, v in preferences.items()]
+            hints.append(f"用户偏好({', '.join(pref_parts)})")
+        if forbidden_items:
+            hints.append(f"不要推荐({', '.join(forbidden_items)})")
+        return '；'.join(hints)
 
     def process_user_input(self, user_input: str) -> str:
         """ Processes user input, manages context, and generates a response. """
@@ -35,7 +52,6 @@ class MCPManager:
         # In a full implementation, this is where ReAct would decide to call tools or generate a direct response.
         # For now, we'll just pass the context to the LLM for a direct response.
         try:
-            # Use LLM to generate a response based on the context
             response_content = self.llm_service.invoke(prompt_context)
             self.memory_manager.add_message_to_short_term_memory("agent", response_content)
             logging.info(f"Agent {self.user_id} response: {response_content}")

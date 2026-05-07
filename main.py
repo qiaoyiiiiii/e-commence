@@ -91,15 +91,13 @@ def run_agent_cli(user_id: str = "default_user"):
 
         logger.info(f"User query: {user_input}")
         try:
-            # Use MCPManager to process the input
-            # For now, MCPManager directly uses the LLM, but will eventually coordinate ReAct and tools
-            # If we want to use RAG through MCP, we need to pass rag_chain to MCPManager or make it a tool
-            # For simplicity, I'll invoke rag_chain directly here for now, but pass through MCPManager's memory
-
-            # Store user input in MCPManager's memory
             mcp_manager.memory_manager.add_message_to_short_term_memory("user", user_input)
 
-            response = rag_chain.invoke({"input": user_input})
+            # Enrich the query with the user's long-term preferences and forbidden items
+            memory_hint = mcp_manager.get_memory_context_hint()
+            query_input = f"{user_input}。[{memory_hint}]" if memory_hint else user_input
+
+            response = rag_chain.invoke({"input": query_input})
             answer = response["answer"]
             context_docs = response["context"]
 

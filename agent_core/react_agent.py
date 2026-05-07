@@ -4,7 +4,7 @@ from typing import List, Optional
 from langchain.agents import create_react_agent, AgentExecutor
 from langchain_core.prompts import PromptTemplate
 from langchain_core.tools import Tool
-from langchain_community.chat_models import ChatOpenAI
+from langchain_deepseek import ChatDeepSeek
 
 from config import Config
 from rag_module.hybrid_retriever import HybridRetrieverManager
@@ -51,12 +51,10 @@ class ReActAgentEngine:
             raise ValueError("DEEPSEEK_API_KEY is not set.")
         
         try:
-            # DeepSeek is compatible with OpenAI API
-            llm = ChatOpenAI(
+            llm = ChatDeepSeek(
                 model=Config.DEEPSEEK_MODEL_NAME,
                 temperature=Config.LLM_TEMPERATURE,
                 api_key=Config.DEEPSEEK_API_KEY,
-                base_url="https://api.deepseek.com/v1",
             )
             logging.info(f"DeepSeek LLM initialized with model: {Config.DEEPSEEK_MODEL_NAME}")
             return llm
@@ -172,12 +170,10 @@ class DeepSeekLLM:
             raise ValueError("DEEPSEEK_API_KEY is not set.")
         
         try:
-            # DeepSeek is compatible with OpenAI API
-            llm = ChatOpenAI(
+            llm = ChatDeepSeek(
                 model=Config.DEEPSEEK_MODEL_NAME,
                 temperature=Config.LLM_TEMPERATURE,
                 api_key=Config.DEEPSEEK_API_KEY,
-                base_url="https://api.deepseek.com/v1",
             )
             logging.info(f"DeepSeek LLM (Direct) initialized with model: {Config.DEEPSEEK_MODEL_NAME}")
             return llm

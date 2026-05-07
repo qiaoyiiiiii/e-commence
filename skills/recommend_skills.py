@@ -84,9 +84,13 @@ class RecommendSkills:
             is_forbidden = False
             if forbidden_items:
                 for forbidden_item in forbidden_items:
-                    # Very basic check, needs more sophistication
+                    tags_value = good_data.get('tags', [])
+                    if isinstance(tags_value, list):
+                        tags_str = ' '.join(str(t) for t in tags_value).lower()
+                    else:
+                        tags_str = str(tags_value).lower()
                     if forbidden_item.lower() in good_data.get('name', '').lower() or \
-                       forbidden_item.lower() in good_data.get('tags', '').lower():
+                       forbidden_item.lower() in tags_str:
                         is_forbidden = True
                         break
             if not is_forbidden:

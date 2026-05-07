@@ -1,5 +1,7 @@
 import json
 import os
+import datetime
+from decimal import Decimal
 from typing import List, Dict, Any
 from database import Database
 from langchain_core.documents import Document
@@ -7,6 +9,22 @@ from config import Config
 import logging
 
 logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s - %(message)s')
+
+def filter_complex_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Converts metadata to ChromaDB-compatible types (str, int, float, bool only)."""
+    filtered = {}
+    for key, value in metadata.items():
+        if value is None or isinstance(value, (bool, int, float, str)):
+            filtered[key] = value
+        elif isinstance(value, Decimal):
+            filtered[key] = float(value)
+        elif isinstance(value, (list, dict)):
+            filtered[key] = json.dumps(value, ensure_ascii=False)
+        elif isinstance(value, (datetime.datetime, datetime.date)):
+            filtered[key] = value.isoformat()
+        else:
+            filtered[key] = str(value)
+    return filtered
 
 class DataProcessor:
     def __init__(self):

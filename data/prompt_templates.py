@@ -2,14 +2,14 @@ from langchain.prompts import PromptTemplate
 
 # RAG Prompt Template
 RAG_PROMPT_TEMPLATE = PromptTemplate(
-    template="""严格根据以下文档回答问题，找不到信息就说找不到。 
+    template="""严格根据以下文档回答问题，找不到信息就说找不到。
 
 参考文档：
 {context}
 
-问题：{question}
+问题：{input}
 回答：""",
-    input_variables=["context", "question"]
+    input_variables=["context", "input"]
 )
 
 # ReAct Agent Prompt Template (Placeholder - will be more complex later)
@@ -45,8 +45,15 @@ MISSING_INFO_PROMPT = """
 def format_chat_history(messages):
     formatted_history = []
     for msg in messages:
-        if msg.type == "human":
-            formatted_history.append(f"Human: {msg.content}")
-        elif msg.type == "ai":
-            formatted_history.append(f"AI: {msg.content}")
+        if isinstance(msg, dict):
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            label = "Human" if role == "user" else "AI"
+            formatted_history.append(f"{label}: {content}")
+        else:
+            # LangChain message object
+            if msg.type == "human":
+                formatted_history.append(f"Human: {msg.content}")
+            elif msg.type == "ai":
+                formatted_history.append(f"AI: {msg.content}")
     return "\n".join(formatted_history)
