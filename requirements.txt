@@ -10,3 +10,4 @@ json5
 mysql-connector-python
 langchain-deepseek
 rank_bm25
+jieba

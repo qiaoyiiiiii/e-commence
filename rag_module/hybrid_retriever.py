@@ -1,5 +1,10 @@
 """
 模块：hybrid_retriever.py
+流程：data_processor.py处理数据并获取分块
+      vectore_store.py处理向量库并获取向量
+      reranker.py 封装基于 Cross-Encoder 的文档重排序
+      最后在这进行
+
 职责：
     提供混合检索管理器（HybridRetrieverManager），将稀疏检索（BM25）与
     稠密检索（向量相似度）通过 RRF（Reciprocal Rank Fusion）融合，
@@ -7,7 +12,7 @@
 
 完整检索流水线：
     ┌─────────────────────────────────────────────────────┐
-    │  用户查询                                            │
+    │  用户查询                                           |
     │     ↓                    ↓                          │
     │  [BM25 稀疏检索]    [向量稠密检索]                   │
     │  (关键词匹配，       (语义相似度，                    │
@@ -56,25 +61,15 @@ from config import Config
 logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def _chinese_char_tokenizer(text: str) -> List[str]:
+def _chinese_jieba_tokenizer(text: str) -> List[str]:
     """
-    中文字符级分词器，供 BM25Retriever 使用。
+    基于 jieba 搜索引擎模式的中文分词器，供 BM25Retriever 使用。
 
-    BM25Retriever 默认以空格分词，对中文几乎失效（中文词之间无空格）。
-    将文本拆分为单个字符后，BM25 可在字符粒度上做关键词匹配，
-    对中文短查询（如商品名、标签）有较好的召回效果。
-
-    参数：
-        text (str): 待分词的文本字符串。
-
-    返回：
-        List[str]: 字符列表，例如 "通勤包" → ["通", "勤", "包"]。
-
-    注意：
-        若项目后续引入 jieba 等中文分词库，可将此函数替换为
-        ``jieba.lcut(text)`` 以获得更精准的词级分词效果。
+    搜索引擎模式在精确模式基础上对长词再次切分，兼顾词和子词，
+    适合 BM25 关键词召回场景（如 "通勤双肩包" → ["通勤", "双肩", "包", "双肩包"]）。
     """
-    return list(text)
+    import jieba
+    return list(jieba.cut_for_search(text))
 
 
 class HybridRetrieverManager:
@@ -119,7 +114,7 @@ class HybridRetrieverManager:
                 # preprocess_func 使用字符级分词，适配中文文本
                 self.bm25_retriever = BM25Retriever.from_documents(
                     documents,
-                    preprocess_func=_chinese_char_tokenizer,
+                    preprocess_func=_chinese_jieba_tokenizer,
                     k=Config.RETRIEVER_K,
                 )
                 logging.info(

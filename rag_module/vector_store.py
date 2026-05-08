@@ -11,7 +11,7 @@
     1. 初始化或加载 HuggingFace BGE 嵌入模型。
     2. 初始化或加载 ChromaDB 持久化向量库。
     3. 对外暴露 get_retriever() 接口，供检索链使用。
-    4. 支持动态追加新文档（add_documents）。
+    4. 支持全量重置向量库（sync_from_mysql）。
 
 依赖：
     - langchain_community.embeddings.HuggingFaceBgeEmbeddings：BGE 嵌入模型封装
@@ -26,10 +26,8 @@
 """
 
 import os
-from typing import List
 from langchain_community.embeddings import HuggingFaceBgeEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_core.documents import Document
 from rag_module.data_processor import DataProcessor
 from config import Config
 import logging
@@ -121,7 +119,7 @@ class VectorStoreManager:
 
             if not documents:
                 # MySQL 暂无商品数据：先建空库保证系统可正常启动，
-                # 后续商品入库后调用 sync_from_mysql() 或 add_documents() 补全向量索引
+                # 后续商品入库后调用 sync_from_mysql() 重建向量索引
                 logging.warning(
                     "No documents found in MySQL. Creating empty vector store. "
                     "Call sync_from_mysql() after populating MySQL to index goods."
@@ -191,28 +189,6 @@ class VectorStoreManager:
             search_kwargs = {"k": Config.RETRIEVER_K}
         return self.vectorstore.as_retriever(search_kwargs=search_kwargs)
 
-    def add_documents(self, documents: List[Document]):
-        """
-        向已初始化的向量库中追加新文档。
-
-        适用场景：新商品上架后无需重建整个向量库，
-        只需将新商品转换为 Document 并调用此方法增量写入。
-
-        参数：
-            documents (List[Document])：待追加的 LangChain Document 列表，
-                metadata 应已经过 filter_complex_metadata 处理。
-
-        副作用：
-            - 成功时以 INFO 级别记录追加数量。
-            - 向量库未初始化时以 ERROR 级别记录错误，不抛出异常。
-        """
-        if self.vectorstore:
-            self.vectorstore.add_documents(documents)
-            logging.info(f"Added {len(documents)} documents to the vector store.")
-        else:
-            # 正常情况下 __init__ 保证 vectorstore 已初始化，此分支为防御性处理
-            logging.error("Vector store not initialized. Cannot add documents.")
-
     def sync_from_mysql(self) -> int:
         """
         全量同步：清空向量库并以 MySQL 当前商品数据重建索引。
@@ -273,13 +249,7 @@ if __name__ == "__main__":
     for i, doc in enumerate(retrieved_docs):
         print(f"Document {i+1}:\nPage Content: {doc.page_content}\nMetadata: {doc.metadata.get('name', '')}\n")
 
-    # 增量追加文档示例（新商品上架时使用）：
-    # new_goods_data = [{'goods_id': 'G002', 'name': '时尚潮流双肩包', 'category': '包包', ...}]
-    # new_documents = DataProcessor().goods_to_langchain_documents(new_goods_data)
-    # if new_documents:
-    #     vector_manager.add_documents(new_documents)
-
-    # 全量同步示例（商品数据批量更新后使用）：
+    # 全量重置示例（新增或更新商品后使用）：
     # count = vector_manager.sync_from_mysql()
     # print(f"Synced {count} documents from MySQL.")
 
