@@ -40,9 +40,9 @@ def get_compare_tools(skill_router: SkillRouter) -> List[Tool]:
             name="compare_goods_parameters",
             func=compare_goods,
             description=(
-                "对比多件商品的详细参数（价格、特点、优缺点、适用场景等）。"
-                "适用：用户想比较几件具体商品，或推荐后需要横向对比时。"
-                "输入：用英文或中文逗号分隔的商品 ID 列表，示例：G001,G002,G003"
+                "查询并横向对比多件商品的详细参数（价格、品牌、特点、优缺点、适用场景等）。"
+                "适用：用户想比较推荐结果中的几件商品时。"
+                "输入：用逗号分隔的商品 ID，ID 可从推荐结果中获取，示例：G001,G002,G003"
             ),
         )
     ]

@@ -29,10 +29,12 @@ def _fmt_goods(result) -> str:
     for i, item in enumerate(result, 1):
         if isinstance(item, dict):
             name = item.get("name", "未知")
+            goods_id = item.get("goods_id", "")
             price = item.get("price", "N/A")
             feature = item.get("feature", "")
+            id_part = f"ID: {goods_id}，" if goods_id else ""
             suffix = f"  特点：{feature}" if feature else ""
-            lines.append(f"{i}. {name}（价格：{price} 元）{suffix}")
+            lines.append(f"{i}. {name}（{id_part}价格：{price} 元）{suffix}")
         else:
             lines.append(str(item))
     return "\n".join(lines)
@@ -68,8 +70,9 @@ def get_recommend_tools(user_id: str, skill_router: SkillRouter) -> List[Tool]:
             name="recommend_by_demand_matching",
             func=demand_matching,
             description=(
-                "根据用户自然语言需求搜索并推荐相关商品。"
-                "适用：用户描述想要什么商品时（如"推荐一款通勤包"）。"
+                "根据用户自然语言需求搜索并推荐相关商品，直接返回结果。"
+                "适用：用户需求明确、直接要求推荐时（如"推荐一款通勤包"）。"
+                "不适用：用户需求模糊、对推荐质量有疑问、或需要分析理由时，那种情况请用 self_reflection_check。"
                 "输入：用户的需求描述字符串。"
             ),
         ),

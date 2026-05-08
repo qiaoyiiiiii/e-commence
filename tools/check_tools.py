@@ -1,16 +1,14 @@
 """
 模块：tools/check_tools.py
 职责：
-    将 CheckSkills.self_reflection_check 封装为 LangChain Tool。
+    将 CheckSkills.self_reflection_check 封装为带检索能力的 LangChain Tool。
 
-    Agent 传入用户的原始需求字符串，工具内部通过 RecommendSkills 的
-    检索器重新召回候选商品，再将查询与商品列表一并送入 self_reflection_check
-    进行 LLM 反思评估，返回评估文本。
+    工具接收用户需求字符串，内部先通过 RecommendSkills 的检索器召回候选商品，
+    再将 (user_query, recommended_goods) 一并送入 self_reflection_check 进行
+    LLM 反思评估，最终返回改进建议。
 
-    这样设计的原因：
-        self_reflection_check 需要 (user_query, recommended_goods) 两个参数，
-        但 ReAct Agent 的 Action Input 只能传字符串。工具层在内部补齐 goods 参数，
-        对 Agent 暴露单一字符串接口，对 Skill 提供结构化参数。
+    这是一个"检索 + 反思"的组合工具，而非仅对已有推荐结果做后置验证。
+    工具层在内部补齐 goods 参数，对 Agent 暴露单一字符串接口。
 
 暴露接口：
     get_check_tools(skill_router: SkillRouter) -> List[Tool]
@@ -61,8 +59,9 @@ def get_check_tools(skill_router: SkillRouter) -> List[Tool]:
             name="self_reflection_check",
             func=self_reflection,
             description=(
-                "对当前推荐结果进行自我反思，评估是否真正符合用户需求，给出改进建议。"
-                "适用：完成推荐后需要验证质量，或用户对推荐结果有疑问时。"
+                "检索候选商品后，由 LLM 深度评估是否真正契合用户需求，并给出有理有据的推荐理由或改进建议。"
+                "适用：用户需求模糊复杂、对推荐结果有疑问、或明确要求认真分析时。"
+                "不适用：用户需求明确且只需快速给出结果时，那种情况请用 recommend_by_demand_matching。"
                 "输入：用户的原始需求描述字符串。"
             ),
         )

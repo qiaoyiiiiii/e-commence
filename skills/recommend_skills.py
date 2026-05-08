@@ -131,6 +131,7 @@ class RecommendSkills:
         logging.info(f"Found {len(recommended_goods)} recommendations for query '{user_query}'.")
         return recommended_goods
 
+# 根据长期数据获得统计偏好和厌恶预测货物
     def recommend_by_personalized_preferences(self,
                                               user_id: str,
                                               limit: int = Config.RECOMMENDATION_COUNT
@@ -175,7 +176,6 @@ class RecommendSkills:
         if preferences.get('budget'):
             # 将预算偏好转为自然语言查询片段
             preference_query_parts.append(f"{preferences['budget']}价位的商品")
-        # 未来可在此处添加更多偏好维度（风格、品牌、场景等）
 
         # 若用户无任何有效偏好记录，回退到通用热门商品查询
         if not preference_query_parts:
@@ -222,11 +222,6 @@ class RecommendSkills:
 
         logging.info(f"Found {len(recommended_goods)} personalized recommendations for user '{user_id}'.")
         return recommended_goods
-
-    # 预留接口：搭配推荐（根据已选商品推荐互补商品）
-    # def recommend_pairing(self, goods_id: str, limit: int = 3) -> List[Dict[str, Any]]:
-    #     """ 根据指定商品推荐搭配商品。 """
-    #     pass
 
 
 # ---------------------------------------------------------------------------
