@@ -11,9 +11,13 @@
        - 所有已注册的 Skill 和 RAG 检索均以 LangChain Tool 的形式注入 Agent。
 
     2. DeepSeekLLM：
-       - 对 ChatDeepSeek 的轻量封装，用于不需要 ReAct 循环的简单 LLM 调用场景
+       - 对 ChatOpenAI（DeepSeek兼容接口）的轻量封装，用于不需要 ReAct 循环的简单 LLM 调用场景
          （例如 MCPManager 中的直接对话生成、记忆压缩摘要等）。
        - 与 ReActAgentEngine 解耦，避免循环导入。
+
+    注意：langchain-deepseek 与 langchain 0.2.x 不兼容（要求 langchain-core>=0.3.34），
+    因此改用 langchain-openai 的 ChatOpenAI 并指定 DeepSeek 的兼容接口地址，
+    功能完全等价。
 
 使用方式：
     # ReAct 智能体（适合复杂多工具推理场景）
@@ -28,14 +32,17 @@
 import logging
 from typing import List, Optional
 
-from langchain.agents import create_react_agent, AgentExecutor
-from langchain_core.prompts import PromptTemplate
+from langchain.agents import create_tool_calling_agent, AgentExecutor # 修改导入：使用 create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import Tool
-from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI  # 替换 langchain_deepseek，使用 OpenAI 兼容接口
 
 from config import Config
 from tools.tool_loader import get_all_tools
 from data.prompt_templates import REACT_SYSTEM_PROMPT
+
+# DeepSeek 的 OpenAI 兼容接口地址
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 
 # 按照全局配置初始化日志，格式包含时间戳、日志级别和消息内容
 logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -57,7 +64,7 @@ class ReActAgentEngine:
 
     属性：
         user_id (str)                  : 当前用户标识，用于日志追踪。
-        llm (ChatDeepSeek)             : LangChain DeepSeek LLM 实例。
+        llm (ChatOpenAI)               : LangChain ChatOpenAI 实例（指向 DeepSeek 接口）。
         tools (List[Tool])             : 注册到 Agent 的工具列表。
         agent_executor (AgentExecutor) : 封装了 ReAct 循环的执行器。
     """
@@ -80,20 +87,19 @@ class ReActAgentEngine:
         self.agent_executor = self._create_agent_executor()
         logging.info(f"ReActAgentEngine initialized for user {self.user_id}")
 
-        # 方法：llm，获得tools，创建Agent 执行器，使用Agent 执行器
     def _initialize_llm(self):
         """
         初始化 DeepSeek LLM 实例，供 ReAct Agent 进行推理使用。
 
-        从 Config 读取 API Key、模型名称和温度参数，通过 langchain_deepseek
-        的 ChatDeepSeek 接口创建 LLM 实例。
+        使用 langchain_openai.ChatOpenAI 并指定 DeepSeek 的 OpenAI 兼容接口地址，
+        与原 ChatDeepSeek 行为完全等价，但无版本冲突问题。
 
         返回：
-            ChatDeepSeek: 已配置好的 LLM 实例。
+            ChatOpenAI: 已配置好的 LLM 实例（指向 DeepSeek 接口）。
 
         异常：
             ValueError : DEEPSEEK_API_KEY 未在 .env 文件中配置时抛出。
-            Exception  : ChatDeepSeek 初始化失败时向上层抛出原始异常。
+            Exception  : ChatOpenAI 初始化失败时向上层抛出原始异常。
         """
         # API Key 是必要条件，缺失时直接报错，避免后续请求失败难以定位
         if not Config.DEEPSEEK_API_KEY:
@@ -101,10 +107,11 @@ class ReActAgentEngine:
             raise ValueError("DEEPSEEK_API_KEY is not set.")
 
         try:
-            llm = ChatDeepSeek(
+            llm = ChatOpenAI(
                 model=Config.DEEPSEEK_MODEL_NAME,      # 模型版本，如 deepseek-chat
                 temperature=Config.LLM_TEMPERATURE,    # 生成温度，控制输出随机性
                 api_key=Config.DEEPSEEK_API_KEY,       # DeepSeek API 密钥
+                base_url=DEEPSEEK_BASE_URL,            # DeepSeek OpenAI 兼容接口地址
             )
             logging.info(f"DeepSeek LLM initialized with model: {Config.DEEPSEEK_MODEL_NAME}")
             return llm
@@ -131,27 +138,28 @@ class ReActAgentEngine:
 
     def _create_agent_executor(self) -> AgentExecutor:
         """
-        使用已初始化的 LLM 和工具集，构建 LangChain ReAct AgentExecutor。
-
-        流程：
-            1. 基于 REACT_SYSTEM_PROMPT 创建 PromptTemplate。
-            2. 调用 create_react_agent 将 LLM、工具和提示词组合为 ReAct Agent。
-            3. 将 Agent 包装为 AgentExecutor，配置最大迭代次数和错误处理策略。
-
-        返回：
-            AgentExecutor: 可直接调用 .invoke() 执行 ReAct 推理的执行器对象。
-
-        配置说明：
-            verbose=Config.DEBUG_MODE   : 调试模式下打印每步推理过程。
-            max_iterations=5            : 最多执行 5 轮 Thought/Action/Observation 循环，
-                                          防止因工具异常或 LLM 误判导致的无限循环。
-            handle_parsing_errors=True  : LLM 输出格式不符合 ReAct 要求时自动重试，
-                                          提高 Agent 鲁棒性。
+        使用已初始化的 LLM 和工具集，构建 LangChain AgentExecutor。
+        
+        注意：由于 langchain 版本兼容性问题，改用 create_tool_calling_agent，
+        它适用于支持 Tool Calling 接口的模型（如 DeepSeek）。
         """
-        # {chat_history} 设为可选（默认空字符串），invoke 时可覆盖注入对话历史
-        prompt = PromptTemplate.from_template(REACT_SYSTEM_PROMPT).partial(chat_history="")
+        # 构造适用于 Tool Calling Agent 的 Prompt
+        system_prompt = REACT_SYSTEM_PROMPT
+        
+        # 创建 ChatPromptTemplate
+        # Tool Calling Agent 不需要显式的 agent_scratchpad，它由框架内部管理
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}"),
+        ])
 
-        agent = create_react_agent(llm=self.llm, tools=self.tools, prompt=prompt)
+        # 创建 Tool Calling Agent
+        agent = create_tool_calling_agent(
+            llm=self.llm, 
+            tools=self.tools, 
+            prompt=prompt
+        )
 
         agent_executor = AgentExecutor(
             agent=agent,
@@ -198,30 +206,29 @@ class DeepSeekLLM:
 
     与 ReActAgentEngine 的区别：
     - 不注册任何工具，不执行 Thought/Action 循环。
-    - 初始化更轻量，仅创建 ChatDeepSeek 实例。
+    - 初始化更轻量，仅创建 ChatOpenAI 实例。
     - 与 ReActAgentEngine 解耦，避免在 mcp_manager.py 中导入时产生循环依赖。
 
     属性：
-        llm (ChatDeepSeek): 底层 LangChain DeepSeek LLM 实例。
+        llm (ChatOpenAI): 底层 LangChain ChatOpenAI 实例（指向 DeepSeek 接口）。
     """
 
     def __init__(self):
         """
-        初始化 DeepSeekLLM，创建底层 ChatDeepSeek 实例。
+        初始化 DeepSeekLLM，创建底层 ChatOpenAI 实例。
 
         异常：
             ValueError : DEEPSEEK_API_KEY 未配置时抛出。
-            Exception  : ChatDeepSeek 初始化失败时向上层抛出原始异常。
+            Exception  : ChatOpenAI 初始化失败时向上层抛出原始异常。
         """
         self.llm = self._initialize_llm()
 
-        # 方法：创建大模型，run，get
     def _initialize_llm(self):
         """
-        初始化 ChatDeepSeek 实例，配置项与 ReActAgentEngine 中相同。
+        初始化 ChatOpenAI 实例（指向 DeepSeek 兼容接口），配置项与 ReActAgentEngine 中相同。
 
         返回：
-            ChatDeepSeek: 已配置好的 LLM 实例。
+            ChatOpenAI: 已配置好的 LLM 实例。
 
         异常：
             ValueError : DEEPSEEK_API_KEY 未配置时抛出。
@@ -233,10 +240,11 @@ class DeepSeekLLM:
             raise ValueError("DEEPSEEK_API_KEY is not set.")
 
         try:
-            llm = ChatDeepSeek(
+            llm = ChatOpenAI(
                 model=Config.DEEPSEEK_MODEL_NAME,      # 模型版本
                 temperature=Config.LLM_TEMPERATURE,    # 生成温度
                 api_key=Config.DEEPSEEK_API_KEY,       # API 密钥
+                base_url=DEEPSEEK_BASE_URL,            # DeepSeek OpenAI 兼容接口地址
             )
             logging.info(f"DeepSeek LLM (Direct) initialized with model: {Config.DEEPSEEK_MODEL_NAME}")
             return llm
@@ -246,10 +254,10 @@ class DeepSeekLLM:
 
     def get_llm(self):
         """
-        获取底层 ChatDeepSeek 实例，供需要直接操作 LangChain LLM 的场景使用。
+        获取底层 ChatOpenAI 实例，供需要直接操作 LangChain LLM 的场景使用。
 
         返回：
-            ChatDeepSeek: 底层 LLM 实例。
+            ChatOpenAI: 底层 LLM 实例。
         """
         return self.llm
 
@@ -270,7 +278,7 @@ class DeepSeekLLM:
         """
         try:
             response = self.llm.invoke(prompt)
-            # LangChain ChatDeepSeek 返回 AIMessage 对象，提取 .content 得到文本
+            # LangChain ChatOpenAI 返回 AIMessage 对象，提取 .content 得到文本
             return response.content
         except Exception as e:
             logging.error(f"Error invoking DeepSeek LLM directly: {e}")

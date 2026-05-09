@@ -11,7 +11,7 @@
 
 依赖：
     - config.Config                     : 项目全局配置，包含日志级别等参数
-    - agent_core.react_agent.DeepSeekLLM: 封装了 DeepSeek 大语言模型调用的服务类
+    - agent_core.llm_client.DeepSeekLLM: 封装了 DeepSeek 大语言模型调用的服务类
 
 使用方式：
     from skills.check_skills import CheckSkills
@@ -24,7 +24,7 @@ import logging
 from typing import List, Dict, Any
 
 from config import Config
-from agent_core.react_agent import DeepSeekLLM
+from agent_core.llm_client import DeepSeekLLM
 
 # 使用项目统一的日志级别和格式初始化日志记录器
 logging.basicConfig(level=Config.LOG_LEVEL, format='%(asctime)s - %(levelname)s - %(message)s')

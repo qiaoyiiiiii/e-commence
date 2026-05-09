@@ -13,7 +13,7 @@
 依赖：
     - config.Config                        : 全局配置（日志级别等）
     - agent_core.memory_manager.MemoryManager : 用户记忆管理
-    - agent_core.react_agent.DeepSeekLLM   : DeepSeek 大模型封装（直接调用模式）
+    - agent_core.llm_client.DeepSeekLLM   : DeepSeek 大模型封装（直接调用模式）
     - data.prompt_templates.format_chat_history : 将消息列表格式化为对话文本的工具函数
 
 使用方式：
@@ -26,8 +26,8 @@ import logging
 from typing import List, Dict, Any
 
 from config import Config
+from agent_core.llm_client import DeepSeekLLM
 from agent_core.memory_manager import MemoryManager
-from agent_core.react_agent import DeepSeekLLM  # DeepSeekLLM 定义于 react_agent.py
 from data.prompt_templates import format_chat_history
 
 # 按照全局配置初始化日志，格式包含时间戳、日志级别和消息内容
