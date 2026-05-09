@@ -140,24 +140,15 @@ class ReActAgentEngine:
         """
         使用已初始化的 LLM 和工具集，构建 LangChain AgentExecutor。
         
-        注意：由于 create_react_agent 导入失败，改用 create_tool_calling_agent。
-        create_tool_calling_agent 适用于支持工具调用的模型（如 DeepSeek Chat）。
+        使用 ChatPromptTemplate.from_template() 来处理包含所有占位符的 REACT_SYSTEM_PROMPT。
         """
-        # 构造适用于 Tool Calling Agent 的 Prompt
-        # create_tool_calling_agent 不需要 agent_scratchpad
-        system_prompt = REACT_SYSTEM_PROMPT
+        # 使用 from_template() 正确解析 REACT_SYSTEM_PROMPT 中的所有占位符：
+        # {chat_history}、{tools}、{tool_names}、{input}、{agent_scratchpad}
+        prompt = ChatPromptTemplate.from_template(REACT_SYSTEM_PROMPT)
         
-        # 创建 ChatPromptTemplate
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            MessagesPlaceholder(variable_name="chat_history", optional=True),
-            ("human", "{input}"),
-        ])
-
-        # 创建 Tool Calling Agent
         agent = create_tool_calling_agent(
             llm=self.llm, 
-            tools=self.tools, 
+            tools=self.tools,
             prompt=prompt
         )
 

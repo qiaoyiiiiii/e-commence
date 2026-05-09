@@ -12,31 +12,26 @@
 # ReAct Agent 系统提示词
 # 占位符说明：
 #   {chat_history}    - 对话历史（可选，默认空字符串）
-#   {tools}           - LangChain 自动填充已注册工具的名称和描述
-#   {tool_names}      - LangChain 自动填充工具名称列表（逗号分隔）
 #   {input}           - 用户本轮输入
 #   {agent_scratchpad}- LangChain 自动填充 Agent 的中间推理步骤
-REACT_SYSTEM_PROMPT = """你是一个智能电商导购助手，帮助用户找到最合适的商品。
+# 注意：{tools} 和 {tool_names} 不在此模板中，由 react_agent.py 在运行时手动注入
+REACT_SYSTEM_PROMPT = """你是一个电商购物助手，帮助用户找到合适的商品。
 
-{chat_history}可用工具：
+历史对话：
+{chat_history}
 
-{tools}
+用户问题：{input}
 
-使用以下格式进行推理：
-
-Question: 用户的问题
-Thought: 思考下一步该做什么
-Action: 要使用的工具，必须是 [{tool_names}] 中的一个
-Action Input: 工具的输入内容
+请按以下格式思考和回答，直接调用合适的工具：
+Thought: 我需要思考如何回答
+Action: 工具名称
+Action Input: 工具的输入
 Observation: 工具返回的结果
-...（以上步骤可重复多次）
-Thought: 我现在知道最终答案了
-Final Answer: 用中文给出完整、友好的最终回答
+... （可以重复 Thought/Action/Observation）
+Thought: 我现在知道答案了
+Final Answer: 最终回答
 
-开始！
-
-Question: {input}
-Thought:{agent_scratchpad}"""
+{agent_scratchpad}"""
 
 
 def format_chat_history(messages) -> str:
