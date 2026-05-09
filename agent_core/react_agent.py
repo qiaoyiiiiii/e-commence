@@ -140,14 +140,14 @@ class ReActAgentEngine:
         """
         使用已初始化的 LLM 和工具集，构建 LangChain AgentExecutor。
         
-        注意：由于 langchain 版本兼容性问题，改用 create_tool_calling_agent，
-        它适用于支持 Tool Calling 接口的模型（如 DeepSeek）。
+        注意：由于 create_react_agent 导入失败，改用 create_tool_calling_agent。
+        create_tool_calling_agent 适用于支持工具调用的模型（如 DeepSeek Chat）。
         """
         # 构造适用于 Tool Calling Agent 的 Prompt
+        # create_tool_calling_agent 不需要 agent_scratchpad
         system_prompt = REACT_SYSTEM_PROMPT
         
         # 创建 ChatPromptTemplate
-        # Tool Calling Agent 不需要显式的 agent_scratchpad，它由框架内部管理
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             MessagesPlaceholder(variable_name="chat_history", optional=True),

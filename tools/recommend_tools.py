@@ -71,7 +71,7 @@ def get_recommend_tools(user_id: str, skill_router: SkillRouter) -> List[Tool]:
             func=demand_matching,
             description=(
                 "根据用户自然语言需求搜索并推荐相关商品，直接返回结果。"
-                "适用：用户需求明确、直接要求推荐时（如"推荐一款通勤包"）。"
+                "适用：用户需求明确、直接要求推荐时（如\"推荐一款通勤包\"）。"
                 "不适用：用户需求模糊、对推荐质量有疑问、或需要分析理由时，那种情况请用 self_reflection_check。"
                 "输入：用户的需求描述字符串。"
             ),
